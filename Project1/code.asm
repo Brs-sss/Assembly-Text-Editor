@@ -10,18 +10,31 @@ includelib kernel32.lib
 includelib gdi32.lib
 WinMain proto :DWORD,:DWORD,:DWORD,:DWORD
 
-.DATA                     ; initialized data
+.data                     ; initialized data
 ClassName db "SimpleWinClass",0        ; the name of our window class
 AppName db "Text Editor",0        ; the name of our window
+MenuName db "File",0                ; The name of our menu in the resource file.
+OpenName db "Open",0
+SaveName db "Save",0
+
+open_string db "You're trying to open a file while this fuction is not implemented right now! hhh--",0
+save_string db "You're trying to save the file while this fuction is not implemented right now! hhh--",0
 
 curText BYTE "nothing", 1000 DUP(0)
 curLen DWORD 7
 char WPARAM 20h 
 
-.DATA?                ; Uninitialized data
+.data?                ; Uninitialized data
 hInstance HINSTANCE ?        ; Instance handle of our program
+hMenu HMENU ?
+hFileMenu HMENU ?
 CommandLine LPSTR ?
-.CODE                ; Here begins our code
+
+.const
+IDM_OPEN equ 1                    ; Menu IDs
+IDM_SAVE equ 2
+
+.code                ; Here begins our code
 start:
 invoke GetModuleHandle, NULL            ; get the instance handle of our program.
                                                                        ; Under Win32, hmodule==hinstance mov hInstance,eax
@@ -32,7 +45,7 @@ mov CommandLine,eax
 invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT        ; call the main function
 invoke ExitProcess, eax                           ; quit our program. The exit code is returned in eax from WinMain.
 
-WinMain proc hInst:HINSTANCE,hPrevInst:HINSTANCE,CmdLine:LPSTR,CmdShow:DWORD
+WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     LOCAL wc:WNDCLASSEX                                            ; create local variables on stack
     LOCAL msg:MSG
     LOCAL hwnd:HWND
@@ -45,13 +58,23 @@ WinMain proc hInst:HINSTANCE,hPrevInst:HINSTANCE,CmdLine:LPSTR,CmdShow:DWORD
     push  hInstance
     pop   wc.hInstance
     mov   wc.hbrBackground,COLOR_WINDOW+1
-    mov   wc.lpszMenuName,NULL
+	mov   wc.lpszMenuName,OFFSET MenuName
     mov   wc.lpszClassName,OFFSET ClassName
     invoke LoadIcon,NULL,IDI_APPLICATION
     mov   wc.hIcon,eax
     mov   wc.hIconSm,eax
     invoke LoadCursor,NULL,IDC_ARROW
     mov   wc.hCursor,eax
+
+	;≤Àµ•¿∏
+	invoke CreateMenu
+    mov hMenu, eax
+	invoke CreatePopupMenu
+    mov hFileMenu, eax
+    invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
+    invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
+    invoke AppendMenu, hMenu, MF_POPUP, hFileMenu, OFFSET MenuName
+
     invoke RegisterClassEx, addr wc                       ; register our window class
     invoke CreateWindowEx,NULL,\
                 ADDR ClassName,\
@@ -62,10 +85,11 @@ WinMain proc hInst:HINSTANCE,hPrevInst:HINSTANCE,CmdLine:LPSTR,CmdShow:DWORD
                 CW_USEDEFAULT,\
                 CW_USEDEFAULT,\
                 NULL,\
-                NULL,\
+                hMenu,\
                 hInst,\
                 NULL
     mov   hwnd,eax
+	invoke SetMenu, hwnd, hMenu
     invoke ShowWindow, hwnd,CmdShow               ; display our window on desktop
     invoke UpdateWindow, hwnd                                 ; refresh the client area
 
@@ -86,6 +110,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     .IF uMsg==WM_DESTROY
         invoke PostQuitMessage,NULL
 
+	;  ‰»Î≈–∂œ
 	.ELSEIF uMsg==WM_CHAR
         push wParam
         pop char
@@ -110,6 +135,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 		final_pro:
 		invoke InvalidateRect, hWnd,NULL,TRUE
 
+	; ¥∞ø⁄ªÊ÷∆
     .ELSEIF uMsg==WM_PAINT
         invoke BeginPaint,hWnd, ADDR ps
         mov    hdc,eax
@@ -117,6 +143,18 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         invoke DrawText, hdc,ADDR curText,-1, ADDR rect, \
                 DT_TOP or DT_LEFT
         invoke EndPaint,hWnd, ADDR ps
+
+	; ≤Àµ•¿∏œÏ”¶
+	.ELSEIF uMsg==WM_COMMAND
+        mov eax,wParam
+        .IF ax==IDM_OPEN
+            invoke MessageBox,NULL,ADDR open_string,OFFSET AppName,MB_OK
+        .ELSEIF ax==IDM_SAVE
+            invoke MessageBox, NULL,ADDR save_string, OFFSET AppName,MB_OK
+        .ELSE
+            invoke DestroyWindow,hWnd
+        .ENDIF
+
     .ELSE
         invoke DefWindowProc,hWnd,uMsg,wParam,lParam
         ret
