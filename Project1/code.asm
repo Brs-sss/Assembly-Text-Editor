@@ -6,11 +6,13 @@ include user32.inc
 include kernel32.inc
 include gdi32.inc
 include comdlg32.inc
+include shlwapi.inc
 
 includelib user32.lib
 includelib kernel32.lib
 includelib comdlg32.lib
 includelib gdi32.lib
+includelib shlwapi.lib
 WinMain proto :DWORD,:DWORD,:DWORD,:DWORD
 
 .data                     ; initialized data
@@ -54,6 +56,7 @@ invoke GetCommandLine                        ; get the command line. You don't h
 mov CommandLine,eax
 invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT        ; call the main function
 invoke ExitProcess, eax                           ; quit our program. The exit code is returned in eax from WinMain.
+
 
 WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     LOCAL wc:WNDCLASSEX                                            ; create local variables on stack
@@ -117,9 +120,10 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     LOCAL hdc:HDC
     LOCAL ps:PAINTSTRUCT
     LOCAL rect:RECT
-	LOCAL ofn:OPENFILENAME
 	LOCAL bytesRead:DWORD
 	LOCAL hFile:HANDLE
+	LOCAL dwBytesWritten:DWORD
+	LOCAL ofn:OPENFILENAME
 
     .IF uMsg==WM_DESTROY
         invoke PostQuitMessage,NULL
@@ -157,12 +161,11 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         invoke DrawText, hdc,ADDR curText,-1, ADDR rect, \
                 DT_TOP or DT_LEFT
         invoke EndPaint,hWnd, ADDR ps
-
 	; ≤Àµ•¿∏œÏ”¶
 	.ELSEIF uMsg==WM_COMMAND
         mov eax,wParam
         .IF ax==IDM_OPEN
-			invoke	RtlZeroMemory,addr ofn,sizeof ofn
+			invoke	RtlZeroMemory, addr ofn, sizeof ofn
 			mov	ofn.lStructSize,sizeof ofn
 			push	hWnd
 			pop	ofn.hwndOwner
@@ -173,8 +176,8 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 			invoke	GetOpenFileName, addr ofn
 			.if	eax
 				mov eax, ofn.lpstrFile
-				mov esi, eax
-				xor ecx, ecx
+					mov esi, eax
+					xor ecx, ecx
 				.while byte ptr [esi] != 0 ;Get the name of file to be open
 					mov al, byte ptr [esi]
 					mov byte ptr [szFileName + ecx], al
@@ -206,11 +209,41 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				  .endif
 			.endif
         .ELSEIF ax==IDM_SAVE
-            invoke MessageBox, NULL,ADDR save_string, OFFSET AppName,MB_OK
+			invoke	RtlZeroMemory, addr ofn, sizeof ofn
+			mov	ofn.lStructSize,sizeof ofn
+			push	hWnd
+			pop	ofn.hwndOwner
+			mov	ofn.lpstrFilter, offset szFilter
+			mov	ofn.lpstrFile, offset szFileName
+			mov ofn.lpstrDefExt, offset szDefExt
+			mov	ofn.nMaxFile, MAX_PATH
+			mov ofn.Flags, OFN_OVERWRITEPROMPT
+			invoke	GetSaveFileName, addr ofn
+			.if	eax
+				mov eax, ofn.lpstrFile
+					mov esi, eax
+					xor ecx, ecx
+				.while byte ptr [esi] != 0 ;Get the name of file to be open
+					mov al, byte ptr [esi]
+					mov byte ptr [szFileName + ecx], al
+					inc esi
+					inc ecx
+				.endw
+				; Try to open file
+				invoke CreateFile, addr szFileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
+				mov hFile, eax
+				.if hFile != INVALID_HANDLE_VALUE
+					mov edx, offset curText
+					mov ecx, curLen
+					invoke WriteFile, hFile, edx, ecx, addr dwBytesWritten, 0
+					invoke CloseHandle, hFile
+				.else
+					invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
+				.endif
+			.endif
         .ELSE
             invoke DestroyWindow,hWnd
         .ENDIF
-
     .ELSE
         invoke DefWindowProc,hWnd,uMsg,wParam,lParam
         ret
