@@ -17,6 +17,9 @@ MenuName db "File",0                ; The name of our menu in the resource file.
 OpenName db "Open",0
 SaveName db "Save",0
 
+EditClassName db "Edit"
+EditName db "Edit Block"
+
 open_string db "You're trying to open a file while this fuction is not implemented right now! hhh--",0
 save_string db "You're trying to save the file while this fuction is not implemented right now! hhh--",0
 
@@ -49,6 +52,7 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     LOCAL wc:WNDCLASSEX                                            ; create local variables on stack
     LOCAL msg:MSG
     LOCAL hwnd:HWND
+	LOCAL hEdit:HWND
 
     mov   wc.cbSize,SIZEOF WNDCLASSEX                   ; fill values in members of wc
     mov   wc.style, CS_HREDRAW or CS_VREDRAW
@@ -57,7 +61,7 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     mov   wc.cbWndExtra,NULL
     push  hInstance
     pop   wc.hInstance
-    mov   wc.hbrBackground,COLOR_WINDOW+1
+    mov   wc.hbrBackground,COLOR_WINDOW+2
 	mov   wc.lpszMenuName,OFFSET MenuName
     mov   wc.lpszClassName,OFFSET ClassName
     invoke LoadIcon,NULL,IDI_APPLICATION
@@ -90,7 +94,23 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
                 NULL
     mov   hwnd,eax
 	invoke SetMenu, hwnd, hMenu
-    invoke ShowWindow, hwnd,CmdShow               ; display our window on desktop
+	
+	invoke CreateWindowEx,NULL,\
+                ADDR EditClassName,\
+                ADDR EditName,\
+                WS_CHILD or WS_VISIBLE or ES_MULTILINE,\
+                100,\
+                100,\
+                100,\
+                100,\
+                hwnd,\
+                NULL,\
+                hInst,\
+                NULL
+	mov   hEdit,eax
+
+    invoke ShowWindow, hwnd, CmdShow               ; display our window on desktop
+	invoke ShowWindow, hEdit, CmdShow
     invoke UpdateWindow, hwnd                                 ; refresh the client area
 
     .WHILE TRUE                                                         ; Enter message loop
@@ -136,13 +156,13 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 		invoke InvalidateRect, hWnd,NULL,TRUE
 
 	; 窗口绘制
-    .ELSEIF uMsg==WM_PAINT
-        invoke BeginPaint,hWnd, ADDR ps
-        mov    hdc,eax
-        invoke GetClientRect,hWnd, ADDR rect
-        invoke DrawText, hdc,ADDR curText,-1, ADDR rect, \
-                DT_TOP or DT_LEFT
-        invoke EndPaint,hWnd, ADDR ps
+    ;.ELSEIF uMsg==WM_PAINT
+    ;    invoke BeginPaint,hWnd, ADDR ps
+    ;    mov    hdc,eax
+    ;    invoke GetClientRect,hWnd, ADDR rect
+    ;    invoke DrawText, hdc,ADDR curText,-1, ADDR rect, \
+    ;            DT_TOP or DT_LEFT
+    ;    invoke EndPaint,hWnd, ADDR ps
 
 	; 菜单栏响应
 	.ELSEIF uMsg==WM_COMMAND
