@@ -5,9 +5,14 @@ include windows.inc
 include user32.inc
 include kernel32.inc
 include gdi32.inc
+include comdlg32.inc
+include shlwapi.inc
+
 includelib user32.lib
 includelib kernel32.lib
+includelib comdlg32.lib
 includelib gdi32.lib
+includelib shlwapi.lib
 WinMain proto :DWORD,:DWORD,:DWORD,:DWORD
 
 .data                     ; initialized data
@@ -16,6 +21,8 @@ AppName db "Text Editor",0        ; the name of our window
 MenuName db "File",0                ; The name of our menu in the resource file.
 OpenName db "Open",0
 SaveName db "Save",0
+szFileName	db	MAX_PATH dup (0)
+pBuffer db 4096 dup(0)
 
 EditClassName db "Edit"
 EditName db "Edit Block"
@@ -36,6 +43,11 @@ CommandLine LPSTR ?
 .const
 IDM_OPEN equ 1                    ; Menu IDs
 IDM_SAVE equ 2
+szWarnCaption	db	'´íÎó',0
+szCreateWarnMessage	db	'CreateFile´íÎó',0
+szReadWarnMessage	db	'ReadFile´íÎó',0
+szFilter	db	'Text Files(*.txt)',0,'*.txt',0,'All Files(*.*)',0,'*.*',0,0
+szDefExt	db	'txt',0
 
 .code                ; Here begins our code
 start:
@@ -47,6 +59,7 @@ invoke GetCommandLine                        ; get the command line. You don't h
 mov CommandLine,eax
 invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT        ; call the main function
 invoke ExitProcess, eax                           ; quit our program. The exit code is returned in eax from WinMain.
+
 
 WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     LOCAL wc:WNDCLASSEX                                            ; create local variables on stack
@@ -127,6 +140,11 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     LOCAL hdc:HDC
     LOCAL ps:PAINTSTRUCT
     LOCAL rect:RECT
+	LOCAL bytesRead:DWORD
+	LOCAL hFile:HANDLE
+	LOCAL dwBytesWritten:DWORD
+	LOCAL ofn:OPENFILENAME
+
     .IF uMsg==WM_DESTROY
         invoke PostQuitMessage,NULL
 
@@ -156,25 +174,97 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 		invoke InvalidateRect, hWnd,NULL,TRUE
 
 	; ´°¿Ú»æÖÆ
-    ;.ELSEIF uMsg==WM_PAINT
-    ;    invoke BeginPaint,hWnd, ADDR ps
-    ;    mov    hdc,eax
-    ;    invoke GetClientRect,hWnd, ADDR rect
-    ;    invoke DrawText, hdc,ADDR curText,-1, ADDR rect, \
-    ;            DT_TOP or DT_LEFT
-    ;    invoke EndPaint,hWnd, ADDR ps
+    .ELSEIF uMsg==WM_PAINT
+        invoke BeginPaint,hWnd, ADDR ps
+        mov    hdc,eax
+        invoke GetClientRect,hWnd, ADDR rect
+        invoke DrawText, hdc,ADDR curText,-1, ADDR rect, \
+                DT_TOP or DT_LEFT
+        invoke EndPaint,hWnd, ADDR ps
 
 	; ²Ëµ¥À¸ÏìÓ¦
 	.ELSEIF uMsg==WM_COMMAND
         mov eax,wParam
         .IF ax==IDM_OPEN
-            invoke MessageBox,NULL,ADDR open_string,OFFSET AppName,MB_OK
+			invoke	RtlZeroMemory, addr ofn, sizeof ofn
+			mov	ofn.lStructSize,sizeof ofn
+			push	hWnd
+			pop	ofn.hwndOwner
+			mov	ofn.lpstrFilter, offset szFilter
+			mov	ofn.lpstrFile, offset szFileName
+			mov	ofn.nMaxFile, MAX_PATH
+			mov	ofn.Flags, OFN_FILEMUSTEXIST or OFN_PATHMUSTEXIST
+			invoke	GetOpenFileName, addr ofn
+			.if	eax
+				mov eax, ofn.lpstrFile
+					mov esi, eax
+					xor ecx, ecx
+				.while byte ptr [esi] != 0 ;Get the name of file to be open
+					mov al, byte ptr [esi]
+					mov byte ptr [szFileName + ecx], al
+					inc esi
+					inc ecx
+				.endw
+
+				; Try to open file
+				invoke CreateFile, addr szFileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL
+				mov hFile, eax
+
+				.if hFile != INVALID_HANDLE_VALUE
+					invoke ReadFile, hFile, addr pBuffer, 4096, addr bytesRead, NULL
+					.if eax != 0 
+						mov ecx, bytesRead
+						mov curLen, ecx
+						mov	esi, 0;
+			CopyLoop:	mov al, byte ptr [pBuffer + esi]
+						mov	byte ptr [curText + esi], al
+						inc esi
+						loop CopyLoop
+					.else
+						 invoke MessageBox, 0, addr szReadWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
+					.endif
+					invoke CloseHandle, hFile
+					invoke InvalidateRect, hWnd,NULL,TRUE
+				  .else
+						invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
+				  .endif
+			.endif
         .ELSEIF ax==IDM_SAVE
-            invoke MessageBox, NULL,ADDR save_string, OFFSET AppName,MB_OK
+			invoke	RtlZeroMemory, addr ofn, sizeof ofn
+			mov	ofn.lStructSize,sizeof ofn
+			push	hWnd
+			pop	ofn.hwndOwner
+			mov	ofn.lpstrFilter, offset szFilter
+			mov	ofn.lpstrFile, offset szFileName
+			mov ofn.lpstrDefExt, offset szDefExt
+			mov	ofn.nMaxFile, MAX_PATH
+			mov ofn.Flags, OFN_OVERWRITEPROMPT
+			invoke	GetSaveFileName, addr ofn
+			.if	eax
+				mov eax, ofn.lpstrFile
+					mov esi, eax
+					xor ecx, ecx
+				.while byte ptr [esi] != 0 ;Get the name of file to be open
+					mov al, byte ptr [esi]
+					mov byte ptr [szFileName + ecx], al
+					inc esi
+					inc ecx
+				.endw
+				; Try to open file
+				invoke CreateFile, addr szFileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
+				mov hFile, eax
+				.if hFile != INVALID_HANDLE_VALUE
+					mov edx, offset curText
+					mov ecx, curLen
+					invoke WriteFile, hFile, edx, ecx, addr dwBytesWritten, 0
+					invoke CloseHandle, hFile
+				.else
+					invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
+				.endif
+			.endif
         .ELSE
             invoke DestroyWindow,hWnd
         .ENDIF
-
     .ELSE
         invoke DefWindowProc,hWnd,uMsg,wParam,lParam
         ret
