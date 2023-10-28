@@ -18,14 +18,24 @@ WinMain proto :DWORD,:DWORD,:DWORD,:DWORD
 .data                     ; initialized data
 ClassName db "SimpleWinClass",0        ; the name of our window class
 AppName db "Text Editor",0        ; the name of our window
-MenuName db "File",0                ; The name of our menu in the resource file.
+
+FileName db "File",0                ; The name of our menu in the resource file.
 OpenName db "Open",0
 SaveName db "Save",0
+
+EditName db "Edit",0
+DateName db "Date",0
+
+ViewName db "View",0
+FontName db "Font",0
+SizeName db "Size",0
+
 szFileName	db	MAX_PATH dup (0)
 pBuffer db 4096 dup(0)
 
-EditClassName db "Edit"
-EditName db "Edit Block"
+EditClassName db "EDIT"
+clientWidth DWORD 0
+clientHeight DWORD 0
 
 open_string db "You're trying to open a file while this fuction is not implemented right now! hhh--",0
 save_string db "You're trying to save the file while this fuction is not implemented right now! hhh--",0
@@ -38,11 +48,17 @@ char WPARAM 20h
 hInstance HINSTANCE ?        ; Instance handle of our program
 hMenu HMENU ?
 hFileMenu HMENU ?
+hEditMenu HMENU ?
+hViewMenu HMENU ?
 CommandLine LPSTR ?
 
 .const
 IDM_OPEN equ 1                    ; Menu IDs
 IDM_SAVE equ 2
+IDM_DATE equ 3
+IDM_FONT equ 4
+IDM_SIZE equ 5
+
 szWarnCaption	db	'¥ÌŒÛ',0
 szCreateWarnMessage	db	'CreateFile¥ÌŒÛ',0
 szReadWarnMessage	db	'ReadFile¥ÌŒÛ',0
@@ -66,6 +82,7 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     LOCAL msg:MSG
     LOCAL hwnd:HWND
 	LOCAL hEdit:HWND
+	LOCAL rect:RECT
 
     mov   wc.cbSize,SIZEOF WNDCLASSEX                   ; fill values in members of wc
     mov   wc.style, CS_HREDRAW or CS_VREDRAW
@@ -74,8 +91,8 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     mov   wc.cbWndExtra,NULL
     push  hInstance
     pop   wc.hInstance
-    mov   wc.hbrBackground,COLOR_WINDOW+2
-	mov   wc.lpszMenuName,OFFSET MenuName
+    mov   wc.hbrBackground,COLOR_WINDOW+1
+	mov   wc.lpszMenuName,OFFSET FileName
     mov   wc.lpszClassName,OFFSET ClassName
     invoke LoadIcon,NULL,IDI_APPLICATION
     mov   wc.hIcon,eax
@@ -87,10 +104,21 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
 	invoke CreateMenu
     mov hMenu, eax
 	invoke CreatePopupMenu
-    mov hFileMenu, eax
+
+    mov hFileMenu, eax ; Œƒº˛≤Àµ•
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
-    invoke AppendMenu, hMenu, MF_POPUP, hFileMenu, OFFSET MenuName
+	invoke AppendMenu, hMenu, MF_POPUP, hFileMenu, OFFSET FileName
+
+	invoke CreatePopupMenu
+    mov hEditMenu, eax ; ±‡º≠≤Àµ•
+    invoke AppendMenu, hEditMenu, MF_STRING, IDM_OPEN, OFFSET DateName
+    invoke AppendMenu, hMenu, MF_POPUP, hEditMenu, OFFSET EditName
+
+	mov hViewMenu, eax ;  ”Õº≤Àµ•
+    invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
+    invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
+    invoke AppendMenu, hMenu, MF_POPUP, hViewMenu, OFFSET ViewName
 
     invoke RegisterClassEx, addr wc                       ; register our window class
     invoke CreateWindowEx,NULL,\
@@ -108,22 +136,26 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     mov   hwnd,eax
 	invoke SetMenu, hwnd, hMenu
 	
-	invoke CreateWindowEx,NULL,\
-                ADDR EditClassName,\
-                ADDR EditName,\
-                WS_CHILD or WS_VISIBLE or ES_MULTILINE,\
-                100,\
-                100,\
-                100,\
-                100,\
-                hwnd,\
-                NULL,\
-                hInst,\
-                NULL
-	mov   hEdit,eax
+	; …Ë÷√editøÿº˛
+	invoke GetClientRect, hwnd, ADDR rect
+	push rect.bottom
+	pop clientHeight
+	push rect.right
+	pop clientWidth
+	invoke CreateWindowEx, NULL,\
+				ADDR EditName, \
+				NULL, \
+				WS_CHILD or WS_VISIBLE or WS_VSCROLL or ES_LEFT or ES_MULTILINE or ES_AUTOVSCROLL, \
+				0, 0, \
+				clientWidth, clientHeight, \
+				hwnd, 
+				NULL, 
+				hInstance, 
+				NULL
+	mov hEdit, eax
 
     invoke ShowWindow, hwnd, CmdShow               ; display our window on desktop
-	invoke ShowWindow, hEdit, CmdShow
+	; invoke ShowWindow, hEdit, CmdShow
     invoke UpdateWindow, hwnd                                 ; refresh the client area
 
     .WHILE TRUE                                                         ; Enter message loop
@@ -147,40 +179,6 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
     .IF uMsg==WM_DESTROY
         invoke PostQuitMessage,NULL
-
-	;  ‰»Î≈–∂œ
-	.ELSEIF uMsg==WM_CHAR
-        push wParam
-        pop char
-		mov eax, char
-		cmp eax, 8
-		je backspace
-
-		mov ebx, OFFSET curText
-		add ebx, curLen
-		mov [ebx], eax
-		inc curLen
-		jmp final_pro
-
-		backspace:
-		dec curLen
-		mov ebx, OFFSET curText
-		add ebx, curLen
-		mov eax, 0
-		mov [ebx], eax
-		jmp final_pro
-
-		final_pro:
-		invoke InvalidateRect, hWnd,NULL,TRUE
-
-	; ¥∞ø⁄ªÊ÷∆
-    .ELSEIF uMsg==WM_PAINT
-        invoke BeginPaint,hWnd, ADDR ps
-        mov    hdc,eax
-        invoke GetClientRect,hWnd, ADDR rect
-        invoke DrawText, hdc,ADDR curText,-1, ADDR rect, \
-                DT_TOP or DT_LEFT
-        invoke EndPaint,hWnd, ADDR ps
 
 	; ≤Àµ•¿∏œÏ”¶
 	.ELSEIF uMsg==WM_COMMAND
@@ -262,8 +260,6 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 					invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
 				.endif
 			.endif
-        .ELSE
-            invoke DestroyWindow,hWnd
         .ENDIF
     .ELSE
         invoke DefWindowProc,hWnd,uMsg,wParam,lParam
