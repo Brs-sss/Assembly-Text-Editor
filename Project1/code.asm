@@ -50,8 +50,8 @@ strStart   DWORD 0
 strEnd     DWORD 0
 emptyString db 0
 
-.data?                ; Uninitialized data
-hInstance HINSTANCE ?        ; Instance handle of our program
+.data?                ; 未初始化变量声明区域
+hInstance HINSTANCE ?        ; 程序的实例句柄
 hMenu HMENU ?
 hFileMenu HMENU ?
 hEditMenu HMENU ?
@@ -60,7 +60,7 @@ hEdit HWND ?
 CommandLine LPSTR ?
 
 .const
-IDM_OPEN equ 1                    ; Menu IDs
+IDM_OPEN equ 1                    ; 菜单ID
 IDM_SAVE equ 2
 IDM_DATE equ 3
 IDM_FONT equ 4
@@ -74,23 +74,23 @@ szDefExt	db	'txt',0
 
 .code                ; Here begins our code
 start:
-invoke GetModuleHandle, NULL            ; get the instance handle of our program.
-                                                                       ; Under Win32, hmodule==hinstance mov hInstance,eax
+invoke GetModuleHandle, NULL            ; 获取程序的实例句柄
+
 mov hInstance,eax
-invoke GetCommandLine                        ; get the command line. You don't have to call this function IF
-                                                                       ; your program doesn't process the command line.
+invoke GetCommandLine                        ; 获取命令行参数
+
 mov CommandLine,eax
-invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT        ; call the main function
-invoke ExitProcess, eax                           ; quit our program. The exit code is returned in eax from WinMain.
+invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT        ; 调用WinMain函数
+invoke ExitProcess, eax                           ; 退出程序
 
 
 WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
-    LOCAL wc:WNDCLASSEX                                            ; create local variables on stack
+    LOCAL wc:WNDCLASSEX                                            ; 创建stack上的初始变量
     LOCAL msg:MSG
     LOCAL hwnd:HWND
 	LOCAL rect:RECT
 
-    mov   wc.cbSize,SIZEOF WNDCLASSEX                   ; fill values in members of wc
+    mov   wc.cbSize,SIZEOF WNDCLASSEX                   ; 为wc成员变量设置初始值
     mov   wc.style, CS_HREDRAW or CS_VREDRAW
     mov   wc.lpfnWndProc, OFFSET WndProc
     mov   wc.cbClsExtra,NULL
@@ -109,8 +109,8 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
 	;菜单栏
 	invoke CreateMenu
     mov hMenu, eax
-	invoke CreatePopupMenu
 
+	invoke CreatePopupMenu
     mov hFileMenu, eax ; 文件菜单
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
@@ -118,15 +118,16 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
 
 	invoke CreatePopupMenu
     mov hEditMenu, eax ; 编辑菜单
-    invoke AppendMenu, hEditMenu, MF_STRING, IDM_OPEN, OFFSET DateName
+    invoke AppendMenu, hEditMenu, MF_STRING, IDM_DATE, OFFSET DateName
     invoke AppendMenu, hMenu, MF_POPUP, hEditMenu, OFFSET EditName
 
+	invoke CreatePopupMenu
 	mov hViewMenu, eax ; 视图菜单
-    invoke AppendMenu, hViewMenu, MF_STRING, IDM_OPEN, OFFSET FontName
-    invoke AppendMenu, hViewMenu, MF_STRING, IDM_SAVE, OFFSET SizeName
+    invoke AppendMenu, hViewMenu, MF_STRING, IDM_FONT, OFFSET FontName
+    invoke AppendMenu, hViewMenu, MF_STRING, IDM_SIZE, OFFSET SizeName
     invoke AppendMenu, hMenu, MF_POPUP, hViewMenu, OFFSET ViewName
 
-    invoke RegisterClassEx, addr wc                       ; register our window class
+    invoke RegisterClassEx, addr wc                       ; 注册窗口类
     invoke CreateWindowEx,NULL,\
                 ADDR ClassName,\
                 ADDR AppName,\
@@ -160,17 +161,16 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
 				NULL
 	mov hEdit, eax
 
-    invoke ShowWindow, hwnd, CmdShow               ; display our window on desktop
-	; invoke ShowWindow, hEdit, CmdShow
-    invoke UpdateWindow, hwnd                                 ; refresh the client area
+    invoke ShowWindow, hwnd, CmdShow               ; 显示窗口
+    invoke UpdateWindow, hwnd                      ; 刷新窗口
 
-    .WHILE TRUE                                                         ; Enter message loop
+    .WHILE TRUE                                                       ; 消息循环
                 invoke GetMessage, ADDR msg,NULL,0,0
                 .BREAK .IF (!eax)
                 invoke TranslateMessage, ADDR msg
                 invoke DispatchMessage, ADDR msg
    .ENDW
-    mov     eax,msg.wParam                                            ; return exit code in eax
+    mov     eax,msg.wParam                                            ; 返回值储存在eax中
     ret
 WinMain endp
 
@@ -185,6 +185,18 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
     .IF uMsg==WM_DESTROY
         invoke PostQuitMessage,NULL
+
+	; 调整子窗口大小
+	.ELSEIF uMsg==WM_SIZE
+		mov eax, lParam
+		and eax, 0000FFFFh
+		mov clientWidth, eax
+		mov eax, lParam
+		shr eax, 16
+		mov clientHeight, eax
+
+		; 重新设置Edit控件大小
+		invoke MoveWindow, hEdit, 0, 0, clientWidth, clientHeight, TRUE
 
 	; 菜单栏响应
 	.ELSEIF uMsg==WM_COMMAND
@@ -203,7 +215,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				mov eax, ofn.lpstrFile
 					mov esi, eax
 					xor ecx, ecx
-				.while byte ptr [esi] != 0 ;Get the name of file to be open
+				.while byte ptr [esi] != 0 ; 获取要打开文件的文件名
 					mov al, byte ptr [esi]
 					mov byte ptr [szFileName + ecx], al
 					inc esi
