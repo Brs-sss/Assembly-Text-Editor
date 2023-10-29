@@ -18,11 +18,24 @@ WinMain proto :DWORD,:DWORD,:DWORD,:DWORD
 .data                     ; initialized data
 ClassName db "SimpleWinClass",0        ; the name of our window class
 AppName db "Text Editor",0        ; the name of our window
-MenuName db "File",0                ; The name of our menu in the resource file.
+
+FileName db "File",0                ; The name of our menu in the resource file.
 OpenName db "Open",0
 SaveName db "Save",0
+
+EditName db "Edit",0
+DateName db "Date",0
+
+ViewName db "View",0
+FontName db "Font",0
+SizeName db "Size",0
+
 szFileName	db	MAX_PATH dup (0)
 pBuffer db 4096 dup(0)
+
+EditClassName db "EDIT"
+clientWidth DWORD 0
+clientHeight DWORD 0
 
 open_string db "You're trying to open a file while this fuction is not implemented right now! hhh--",0
 save_string db "You're trying to save the file while this fuction is not implemented right now! hhh--",0
@@ -31,15 +44,28 @@ curText BYTE "nothing", 1000 DUP(0)
 curLen DWORD 7
 char WPARAM 20h 
 
+hGlobal    dd 0           ; 全局内存句柄
+lpText     dd 0           ; 文本缓冲区指针
+strStart   DWORD 0
+strEnd     DWORD 0
+emptyString db 0
+
 .data?                ; Uninitialized data
 hInstance HINSTANCE ?        ; Instance handle of our program
 hMenu HMENU ?
 hFileMenu HMENU ?
+hEditMenu HMENU ?
+hViewMenu HMENU ?
+hEdit HWND ?
 CommandLine LPSTR ?
 
 .const
 IDM_OPEN equ 1                    ; Menu IDs
 IDM_SAVE equ 2
+IDM_DATE equ 3
+IDM_FONT equ 4
+IDM_SIZE equ 5
+
 szWarnCaption	db	'错误',0
 szCreateWarnMessage	db	'CreateFile错误',0
 szReadWarnMessage	db	'ReadFile错误',0
@@ -62,6 +88,7 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     LOCAL wc:WNDCLASSEX                                            ; create local variables on stack
     LOCAL msg:MSG
     LOCAL hwnd:HWND
+	LOCAL rect:RECT
 
     mov   wc.cbSize,SIZEOF WNDCLASSEX                   ; fill values in members of wc
     mov   wc.style, CS_HREDRAW or CS_VREDRAW
@@ -71,7 +98,7 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     push  hInstance
     pop   wc.hInstance
     mov   wc.hbrBackground,COLOR_WINDOW+1
-	mov   wc.lpszMenuName,OFFSET MenuName
+	mov   wc.lpszMenuName,OFFSET FileName
     mov   wc.lpszClassName,OFFSET ClassName
     invoke LoadIcon,NULL,IDI_APPLICATION
     mov   wc.hIcon,eax
@@ -83,10 +110,21 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
 	invoke CreateMenu
     mov hMenu, eax
 	invoke CreatePopupMenu
-    mov hFileMenu, eax
+
+    mov hFileMenu, eax ; 文件菜单
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
-    invoke AppendMenu, hMenu, MF_POPUP, hFileMenu, OFFSET MenuName
+	invoke AppendMenu, hMenu, MF_POPUP, hFileMenu, OFFSET FileName
+
+	invoke CreatePopupMenu
+    mov hEditMenu, eax ; 编辑菜单
+    invoke AppendMenu, hEditMenu, MF_STRING, IDM_OPEN, OFFSET DateName
+    invoke AppendMenu, hMenu, MF_POPUP, hEditMenu, OFFSET EditName
+
+	mov hViewMenu, eax ; 视图菜单
+    invoke AppendMenu, hViewMenu, MF_STRING, IDM_OPEN, OFFSET FontName
+    invoke AppendMenu, hViewMenu, MF_STRING, IDM_SAVE, OFFSET SizeName
+    invoke AppendMenu, hMenu, MF_POPUP, hViewMenu, OFFSET ViewName
 
     invoke RegisterClassEx, addr wc                       ; register our window class
     invoke CreateWindowEx,NULL,\
@@ -103,7 +141,27 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
                 NULL
     mov   hwnd,eax
 	invoke SetMenu, hwnd, hMenu
-    invoke ShowWindow, hwnd,CmdShow               ; display our window on desktop
+	
+	; 设置edit控件
+	invoke GetClientRect, hwnd, ADDR rect
+	push rect.bottom
+	pop clientHeight
+	push rect.right
+	pop clientWidth
+	invoke CreateWindowEx, NULL,\
+				ADDR EditName, \
+				NULL, \
+				WS_CHILD or WS_VISIBLE or WS_VSCROLL or ES_LEFT or ES_MULTILINE or ES_AUTOVSCROLL, \
+				0, 0, \
+				clientWidth, clientHeight, \
+				hwnd, 
+				NULL, 
+				hInstance, 
+				NULL
+	mov hEdit, eax
+
+    invoke ShowWindow, hwnd, CmdShow               ; display our window on desktop
+	; invoke ShowWindow, hEdit, CmdShow
     invoke UpdateWindow, hwnd                                 ; refresh the client area
 
     .WHILE TRUE                                                         ; Enter message loop
@@ -128,39 +186,6 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     .IF uMsg==WM_DESTROY
         invoke PostQuitMessage,NULL
 
-	; 输入判断
-	.ELSEIF uMsg==WM_CHAR
-        push wParam
-        pop char
-		mov eax, char
-		cmp eax, 8
-		je backspace
-
-		mov ebx, OFFSET curText
-		add ebx, curLen
-		mov [ebx], eax
-		inc curLen
-		jmp final_pro
-
-		backspace:
-		dec curLen
-		mov ebx, OFFSET curText
-		add ebx, curLen
-		mov eax, 0
-		mov [ebx], eax
-		jmp final_pro
-
-		final_pro:
-		invoke InvalidateRect, hWnd,NULL,TRUE
-
-	; 窗口绘制
-    .ELSEIF uMsg==WM_PAINT
-        invoke BeginPaint,hWnd, ADDR ps
-        mov    hdc,eax
-        invoke GetClientRect,hWnd, ADDR rect
-        invoke DrawText, hdc,ADDR curText,-1, ADDR rect, \
-                DT_TOP or DT_LEFT
-        invoke EndPaint,hWnd, ADDR ps
 	; 菜单栏响应
 	.ELSEIF uMsg==WM_COMMAND
         mov eax,wParam
@@ -192,6 +217,16 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				.if hFile != INVALID_HANDLE_VALUE
 					invoke ReadFile, hFile, addr pBuffer, 4096, addr bytesRead, NULL
 					.if eax != 0 
+						mov esi, offset curText
+						mov ecx, 0
+			ClearLoop:
+						mov al, [esi + ecx]				; 读取字符串中的一个字符
+						cmp al, 0						; 检查字符是否为null（字符串结束符）
+						je EndClear						; 如果是null，结束清除
+						mov byte ptr [esi + ecx], 0		; 否则，将字符设置为null
+						inc ecx							; 增加计数器
+						jmp ClearLoop					; 继续处理下一个字符
+			EndClear:
 						mov ecx, bytesRead
 						mov curLen, ecx
 						mov	esi, 0;
@@ -199,14 +234,23 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 						mov	byte ptr [curText + esi], al
 						inc esi
 						loop CopyLoop
+						; 把文件里的内容显示到edit控件中
+
+						; 选中编辑框中的所有内容
+						invoke SendMessage, hEdit, EM_SETSEL, 0, -1
+
+						; 替换为文件内容
+						invoke SendMessage, hEdit, EM_REPLACESEL, TRUE, addr curText
+
+						invoke SetFocus, hEdit
 					.else
-						 invoke MessageBox, 0, addr szReadWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
+						invoke MessageBox, 0, addr szReadWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
 					.endif
 					invoke CloseHandle, hFile
 					invoke InvalidateRect, hWnd,NULL,TRUE
-				  .else
-						invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
-				  .endif
+				.else
+					invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
+				.endif
 			.endif
         .ELSEIF ax==IDM_SAVE
 			invoke	RtlZeroMemory, addr ofn, sizeof ofn
@@ -233,16 +277,54 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				invoke CreateFile, addr szFileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
 				mov hFile, eax
 				.if hFile != INVALID_HANDLE_VALUE
-					mov edx, offset curText
-					mov ecx, curLen
-					invoke WriteFile, hFile, edx, ecx, addr dwBytesWritten, 0
+					; 选择编辑框中的所有文本
+					invoke SendMessage, hEdit, EM_SETSEL, 0, -1
+
+					; 获取选中文本的起始和结束位置
+					invoke SendMessage, hEdit, EM_GETSEL, addr strStart, addr strEnd
+
+					; 计算选中文本的长度
+					mov eax, strEnd
+					sub eax, strStart
+
+					; 分配足够的内存来存储选中文本
+					inc eax
+					invoke GlobalAlloc, GMEM_ZEROINIT, eax
+					mov hGlobal, eax
+
+					; 锁定全局内存并获取其指针
+					invoke GlobalLock, hGlobal
+					mov lpText, eax
+
+					; 获取选中文本
+					mov eax, strEnd
+					sub eax, strStart
+					inc eax
+					invoke GetWindowText, hEdit, lpText, eax
+
+					; 解锁全局内存
+					invoke GlobalUnlock, hGlobal
+
+					; 保存
+					mov ecx, strEnd
+					sub ecx, strStart
+					invoke WriteFile, hFile, lpText, ecx, addr dwBytesWritten, 0
+
+					; 释放全局内存
+					invoke GlobalFree, hGlobal
+					
+					; 关闭文件句柄
 					invoke CloseHandle, hFile
+
+					; 将光标移动到末尾
+					invoke SendMessage, hEdit, EM_SETSEL, -1, -1
+
+					; 设置焦点
+					invoke SetFocus, hEdit
 				.else
 					invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
 				.endif
 			.endif
-        .ELSE
-            invoke DestroyWindow,hWnd
         .ENDIF
     .ELSE
         invoke DefWindowProc,hWnd,uMsg,wParam,lParam
