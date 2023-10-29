@@ -44,12 +44,19 @@ curText BYTE "nothing", 1000 DUP(0)
 curLen DWORD 7
 char WPARAM 20h 
 
+hGlobal    dd 0           ; 全局内存句柄
+lpText     dd 0           ; 文本缓冲区指针
+strStart   DWORD 0
+strEnd     DWORD 0
+emptyString db 0
+
 .data?                ; Uninitialized data
 hInstance HINSTANCE ?        ; Instance handle of our program
 hMenu HMENU ?
 hFileMenu HMENU ?
 hEditMenu HMENU ?
 hViewMenu HMENU ?
+hEdit HWND ?
 CommandLine LPSTR ?
 
 .const
@@ -81,7 +88,6 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     LOCAL wc:WNDCLASSEX                                            ; create local variables on stack
     LOCAL msg:MSG
     LOCAL hwnd:HWND
-	LOCAL hEdit:HWND
 	LOCAL rect:RECT
 
     mov   wc.cbSize,SIZEOF WNDCLASSEX                   ; fill values in members of wc
@@ -116,8 +122,8 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     invoke AppendMenu, hMenu, MF_POPUP, hEditMenu, OFFSET EditName
 
 	mov hViewMenu, eax ; 视图菜单
-    invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
-    invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
+    invoke AppendMenu, hViewMenu, MF_STRING, IDM_OPEN, OFFSET FontName
+    invoke AppendMenu, hViewMenu, MF_STRING, IDM_SAVE, OFFSET SizeName
     invoke AppendMenu, hMenu, MF_POPUP, hViewMenu, OFFSET ViewName
 
     invoke RegisterClassEx, addr wc                       ; register our window class
@@ -211,6 +217,16 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				.if hFile != INVALID_HANDLE_VALUE
 					invoke ReadFile, hFile, addr pBuffer, 4096, addr bytesRead, NULL
 					.if eax != 0 
+						mov esi, offset curText
+						mov ecx, 0
+			ClearLoop:
+						mov al, [esi + ecx]				; 读取字符串中的一个字符
+						cmp al, 0						; 检查字符是否为null（字符串结束符）
+						je EndClear						; 如果是null，结束清除
+						mov byte ptr [esi + ecx], 0		; 否则，将字符设置为null
+						inc ecx							; 增加计数器
+						jmp ClearLoop					; 继续处理下一个字符
+			EndClear:
 						mov ecx, bytesRead
 						mov curLen, ecx
 						mov	esi, 0;
@@ -218,14 +234,23 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 						mov	byte ptr [curText + esi], al
 						inc esi
 						loop CopyLoop
+						; 把文件里的内容显示到edit控件中
+
+						; 选中编辑框中的所有内容
+						invoke SendMessage, hEdit, EM_SETSEL, 0, -1
+
+						; 替换为文件内容
+						invoke SendMessage, hEdit, EM_REPLACESEL, TRUE, addr curText
+
+						invoke SetFocus, hEdit
 					.else
-						 invoke MessageBox, 0, addr szReadWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
+						invoke MessageBox, 0, addr szReadWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
 					.endif
 					invoke CloseHandle, hFile
 					invoke InvalidateRect, hWnd,NULL,TRUE
-				  .else
-						invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
-				  .endif
+				.else
+					invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
+				.endif
 			.endif
         .ELSEIF ax==IDM_SAVE
 			invoke	RtlZeroMemory, addr ofn, sizeof ofn
@@ -252,10 +277,50 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				invoke CreateFile, addr szFileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
 				mov hFile, eax
 				.if hFile != INVALID_HANDLE_VALUE
-					mov edx, offset curText
-					mov ecx, curLen
-					invoke WriteFile, hFile, edx, ecx, addr dwBytesWritten, 0
+					; 选择编辑框中的所有文本
+					invoke SendMessage, hEdit, EM_SETSEL, 0, -1
+
+					; 获取选中文本的起始和结束位置
+					invoke SendMessage, hEdit, EM_GETSEL, addr strStart, addr strEnd
+
+					; 计算选中文本的长度
+					mov eax, strEnd
+					sub eax, strStart
+
+					; 分配足够的内存来存储选中文本
+					inc eax
+					invoke GlobalAlloc, GMEM_ZEROINIT, eax
+					mov hGlobal, eax
+
+					; 锁定全局内存并获取其指针
+					invoke GlobalLock, hGlobal
+					mov lpText, eax
+
+					; 获取选中文本
+					mov eax, strEnd
+					sub eax, strStart
+					inc eax
+					invoke GetWindowText, hEdit, lpText, eax
+
+					; 解锁全局内存
+					invoke GlobalUnlock, hGlobal
+
+					; 保存
+					mov ecx, strEnd
+					sub ecx, strStart
+					invoke WriteFile, hFile, lpText, ecx, addr dwBytesWritten, 0
+
+					; 释放全局内存
+					invoke GlobalFree, hGlobal
+					
+					; 关闭文件句柄
 					invoke CloseHandle, hFile
+
+					; 将光标移动到末尾
+					invoke SendMessage, hEdit, EM_SETSEL, -1, -1
+
+					; 设置焦点
+					invoke SetFocus, hEdit
 				.else
 					invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
 				.endif
