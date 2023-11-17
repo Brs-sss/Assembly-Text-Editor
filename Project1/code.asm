@@ -50,6 +50,10 @@ strStart   DWORD 0
 strEnd     DWORD 0
 emptyString db 0
 
+dateBuffer db 64 dup(0)
+dateFormat db "%02d:%02d %04d/%02d/%02d ", 0
+systemtime_buffer SYSTEMTIME <> ; 用于存储系统时间的变量
+
 .data?                ; 未初始化变量声明区域
 hInstance HINSTANCE ?        ; 程序的实例句柄
 hMenu HMENU ?
@@ -264,7 +268,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 					invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
 				.endif
 			.endif
-        .ELSEIF ax==IDM_SAVE
+		.ELSEIF ax==IDM_SAVE
 			invoke	RtlZeroMemory, addr ofn, sizeof ofn
 			mov	ofn.lStructSize,sizeof ofn
 			push	hWnd
@@ -337,6 +341,32 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 					invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
 				.endif
 			.endif
+		.ELSEIF ax==IDM_DATE
+			invoke GetLocalTime, addr systemtime_buffer
+
+			; 将时间格式化为字符串
+			invoke wsprintf, addr dateBuffer, addr dateFormat, systemtime_buffer.wHour, systemtime_buffer.wMinute, systemtime_buffer.wYear, systemtime_buffer.wMonth, systemtime_buffer.wDay
+			; 获取Edit控件的当前文本长度
+			invoke SendMessage, hEdit, WM_GETTEXTLENGTH, 0, 0
+			mov edx, eax  ; edx保存当前文本长度
+
+			mov esi, offset dateBuffer
+
+			; 分配足够的内存来存储当前文本和要插入的新文本
+			add edx, 17  ;
+			invoke GlobalAlloc, GMEM_ZEROINIT, edx
+			mov edi, eax
+
+			invoke SendMessage, hEdit, WM_GETTEXT, edx, edi
+
+			invoke lstrcat, edi, esi
+
+			; 将新文本写入Edit控件
+			invoke SendMessage, hEdit, EM_REPLACESEL, TRUE, edi
+
+			; 释放新分配的内存
+			invoke GlobalFree, edi
+
         .ENDIF
     .ELSE
         invoke DefWindowProc,hWnd,uMsg,wParam,lParam
