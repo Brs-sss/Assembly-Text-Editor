@@ -22,6 +22,7 @@ AppName db "Text Editor",0        ; the name of our window
 FileName db "File",0                ; The name of our menu in the resource file.
 OpenName db "Open",0
 SaveName db "Save",0
+SaveAsName db "Save As",0
 
 EditName db "Edit",0
 DateName db "Date",0
@@ -32,6 +33,8 @@ SizeName db "Size",0
 
 szFileName	db	MAX_PATH dup (0)
 pBuffer db 4096 dup(0)
+szDefExt db "txt",0 ; 设置默认扩展名
+szFilter	db	'Text Files(*.txt)',0,'*.txt',0,'All Files(*.*)',0,'*.*',0,0
 
 EditClassName db "EDIT"
 clientWidth DWORD 0
@@ -52,7 +55,7 @@ emptyString db 0
 
 dateBuffer db 64 dup(0)
 dateFormat db "%02d:%02d %04d/%02d/%02d ", 0
-systemtime_buffer SYSTEMTIME <> ; 用于存储系统时间的变量
+pathBuffer db 256 dup(0) ; 用于记录当前文件已保存的路径
 
 .data?                ; 未初始化变量声明区域
 hInstance HINSTANCE ?        ; 程序的实例句柄
@@ -63,18 +66,21 @@ hViewMenu HMENU ?
 hEdit HWND ?
 CommandLine LPSTR ?
 
+hasSaved db, 0
+
 .const
 IDM_OPEN equ 1                    ; 菜单ID
 IDM_SAVE equ 2
 IDM_DATE equ 3
 IDM_FONT equ 4
 IDM_SIZE equ 5
+IDM_SAVEAS equ 6
 
 szWarnCaption	db	'错误',0
 szCreateWarnMessage	db	'CreateFile错误',0
 szReadWarnMessage	db	'ReadFile错误',0
-szFilter	db	'Text Files(*.txt)',0,'*.txt',0,'All Files(*.*)',0,'*.*',0,0
-szDefExt	db	'txt',0
+
+systemtime_buffer SYSTEMTIME <> ; 用于存储系统时间的变量
 
 .code                ; Here begins our code
 start:
@@ -87,6 +93,93 @@ mov CommandLine,eax
 invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT        ; 调用WinMain函数
 invoke ExitProcess, eax                           ; 退出程序
 
+SaveFile proc fileName:DWORD, nameLength:DWORD, dwBytesWritten:DWORD, hFile:HANDLE
+	; Try to open file
+	invoke CreateFile, fileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
+	mov hFile, eax
+	.if hFile != INVALID_HANDLE_VALUE
+		; 修改保存信息
+		mov ecx, nameLength
+		mov esi, fileName
+		mov edi, offset pathBuffer
+		rep movsb
+		mov hasSaved, 1
+
+		; 选择编辑框中的所有文本
+		invoke SendMessage, hEdit, EM_SETSEL, 0, -1
+
+		; 获取选中文本的起始和结束位置
+		invoke SendMessage, hEdit, EM_GETSEL, addr strStart, addr strEnd
+
+		; 计算选中文本的长度
+		mov eax, strEnd
+		sub eax, strStart
+
+		; 分配足够的内存来存储选中文本
+		inc eax
+		invoke GlobalAlloc, GMEM_ZEROINIT, eax
+		mov hGlobal, eax
+
+		; 锁定全局内存并获取其指针
+		invoke GlobalLock, hGlobal
+		mov lpText, eax
+
+		; 获取选中文本
+		mov eax, strEnd
+		sub eax, strStart
+		inc eax
+		invoke GetWindowText, hEdit, lpText, eax
+
+		; 解锁全局内存
+		invoke GlobalUnlock, hGlobal
+
+		; 保存
+		mov ecx, strEnd
+		sub ecx, strStart
+		invoke WriteFile, hFile, lpText, ecx, addr dwBytesWritten, 0
+
+		; 释放全局内存
+		invoke GlobalFree, hGlobal
+					
+		; 关闭文件句柄
+		invoke CloseHandle, hFile
+
+		; 将光标移动到末尾
+		invoke SendMessage, hEdit, EM_SETSEL, -1, -1
+
+		; 设置焦点
+		invoke SetFocus, hEdit
+		.else
+			invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
+		.endif
+		ret
+SaveFile endp
+
+CheckFileNameExtension proc lpFileName:DWORD, lpDefExt:DWORD
+    ; 寻找文件名中的最后一个反斜杠
+    invoke StrRChr, lpFileName, 0, '\\'
+    mov ecx, eax
+
+    ; 如果找到反斜杠，移动到下一个字符
+    .if ecx != 0
+        inc ecx
+    .else
+        mov ecx, lpFileName
+    .endif
+
+    ; 寻找文件名中的最后一个点号
+    invoke StrRChr, ecx, 0, '.'
+    .if eax == 0
+        ; 如果没有点号，检查是否存在同名文件夹
+        invoke PathIsDirectory, lpFileName
+        .if eax == FALSE
+            ; 如果不是文件夹，追加默认扩展名
+            invoke lstrcat, lpFileName, lpDefExt
+        .endif
+    .endif
+
+    ret
+CheckFileNameExtension endp
 
 WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     LOCAL wc:WNDCLASSEX                                            ; 创建stack上的初始变量
@@ -118,6 +211,7 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     mov hFileMenu, eax ; 文件菜单
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
+	invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveAsName
 	invoke AppendMenu, hMenu, MF_POPUP, hFileMenu, OFFSET FileName
 
 	invoke CreatePopupMenu
@@ -231,6 +325,14 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				mov hFile, eax
 
 				.if hFile != INVALID_HANDLE_VALUE
+					; 设置保存相关信息
+					mov hasSaved, 1
+					mov ecx, LENGTHOF szFileName
+					mov esi, offset szFileName
+					mov edi, offset pathBuffer
+					rep movsb
+					mov eax, offset szFileName
+
 					invoke ReadFile, hFile, addr pBuffer, 4096, addr bytesRead, NULL
 					.if eax != 0 
 						mov esi, offset curText
@@ -262,6 +364,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 					.else
 						invoke MessageBox, 0, addr szReadWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
 					.endif
+
 					invoke CloseHandle, hFile
 					invoke InvalidateRect, hWnd,NULL,TRUE
 				.else
@@ -270,76 +373,59 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 			.endif
 		.ELSEIF ax==IDM_SAVE
 			invoke	RtlZeroMemory, addr ofn, sizeof ofn
-			mov	ofn.lStructSize,sizeof ofn
-			push	hWnd
-			pop	ofn.hwndOwner
-			mov	ofn.lpstrFilter, offset szFilter
-			mov	ofn.lpstrFile, offset szFileName
-			mov ofn.lpstrDefExt, offset szDefExt
-			mov	ofn.nMaxFile, MAX_PATH
-			mov ofn.Flags, OFN_OVERWRITEPROMPT
-			invoke	GetSaveFileName, addr ofn
-			.if	eax
-				mov eax, ofn.lpstrFile
-					mov esi, eax
-					xor ecx, ecx
-				.while byte ptr [esi] != 0 ;Get the name of file to be open
-					mov al, byte ptr [esi]
-					mov byte ptr [szFileName + ecx], al
-					inc esi
-					inc ecx
-				.endw
-				; Try to open file
-				invoke CreateFile, addr szFileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
-				mov hFile, eax
-				.if hFile != INVALID_HANDLE_VALUE
-					; 选择编辑框中的所有文本
-					invoke SendMessage, hEdit, EM_SETSEL, 0, -1
-
-					; 获取选中文本的起始和结束位置
-					invoke SendMessage, hEdit, EM_GETSEL, addr strStart, addr strEnd
-
-					; 计算选中文本的长度
-					mov eax, strEnd
-					sub eax, strStart
-
-					; 分配足够的内存来存储选中文本
-					inc eax
-					invoke GlobalAlloc, GMEM_ZEROINIT, eax
-					mov hGlobal, eax
-
-					; 锁定全局内存并获取其指针
-					invoke GlobalLock, hGlobal
-					mov lpText, eax
-
-					; 获取选中文本
-					mov eax, strEnd
-					sub eax, strStart
-					inc eax
-					invoke GetWindowText, hEdit, lpText, eax
-
-					; 解锁全局内存
-					invoke GlobalUnlock, hGlobal
-
-					; 保存
-					mov ecx, strEnd
-					sub ecx, strStart
-					invoke WriteFile, hFile, lpText, ecx, addr dwBytesWritten, 0
-
-					; 释放全局内存
-					invoke GlobalFree, hGlobal
-					
-					; 关闭文件句柄
-					invoke CloseHandle, hFile
-
-					; 将光标移动到末尾
-					invoke SendMessage, hEdit, EM_SETSEL, -1, -1
-
-					; 设置焦点
-					invoke SetFocus, hEdit
-				.else
-					invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
+			.if hasSaved==0
+				mov	ofn.lStructSize,sizeof ofn
+				push	hWnd
+				pop	ofn.hwndOwner
+				mov	ofn.lpstrFilter, offset szFilter
+				mov	ofn.lpstrFile, offset szFileName
+				mov ofn.lpstrDefExt, offset szDefExt
+				mov	ofn.nMaxFile, MAX_PATH
+				mov ofn.Flags, OFN_OVERWRITEPROMPT
+				invoke	GetSaveFileName, addr ofn
+				.if	eax
+					invoke CheckFileNameExtension, addr szFileName, offset szDefExt
+					mov eax, ofn.lpstrFile
+						mov esi, eax
+						xor ecx, ecx
+					.while byte ptr [esi] != 0 ;Get the name of file to be open
+						mov al, byte ptr [esi]
+						mov byte ptr [szFileName + ecx], al
+						inc esi
+						inc ecx
+					.endw
+					invoke SaveFile, addr szFileName, LENGTHOF szFileName, dwBytesWritten, hFile
 				.endif
+			.else
+				invoke SaveFile, addr pathBuffer, LENGTHOF szFileName, dwBytesWritten, hFile
+			.endif
+		.ELSEIF ax==IDM_SAVEAS
+			invoke	RtlZeroMemory, addr ofn, sizeof ofn
+			.if hasSaved==0
+				mov	ofn.lStructSize,sizeof ofn
+				push	hWnd
+				pop	ofn.hwndOwner
+				mov	ofn.lpstrFilter, offset szFilter
+				mov	ofn.lpstrFile, offset szFileName
+				mov ofn.lpstrDefExt, offset szDefExt
+				mov	ofn.nMaxFile, MAX_PATH
+				mov ofn.Flags, OFN_OVERWRITEPROMPT
+				invoke	GetSaveFileName, addr ofn
+				.if	eax
+					invoke CheckFileNameExtension, addr szFileName, offset szDefExt
+					mov eax, ofn.lpstrFile
+						mov esi, eax
+						xor ecx, ecx
+					.while byte ptr [esi] != 0 ;Get the name of file to be open
+						mov al, byte ptr [esi]
+						mov byte ptr [szFileName + ecx], al
+						inc esi
+						inc ecx
+					.endw
+					invoke SaveFile, addr szFileName, LENGTHOF szFileName, dwBytesWritten, hFile
+				.endif
+			.else
+				invoke SaveFile, addr pathBuffer, LENGTHOF szFileName, dwBytesWritten, hFile
 			.endif
 		.ELSEIF ax==IDM_DATE
 			invoke GetLocalTime, addr systemtime_buffer
