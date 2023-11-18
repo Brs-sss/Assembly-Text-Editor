@@ -37,7 +37,7 @@ SizeName db "Size",0
 
 szFileName	db	MAX_PATH dup (0)
 pBuffer db 4096 dup(0)
-szDefExt db "txt",0 ; ����Ĭ����չ��
+szDefExt db "txt",0 ; 设置默认扩展名
 szFilter	db	'Text Files(*.txt)',0,'*.txt',0,'All Files(*.*)',0,'*.*',0,0
 
 EditClassName db "EDIT"
@@ -51,15 +51,15 @@ curText BYTE "nothing", 1000 DUP(0)
 curLen DWORD 7
 char WPARAM 20h 
 
-hGlobal    dd 0           ; ȫ���ڴ���
-lpText     dd 0           ; �ı�������ָ��
+hGlobal    dd 0           ; 全局内存句柄
+lpText     dd 0           ; 文本缓冲区指针
 strStart   DWORD 0
 strEnd     DWORD 0
 emptyString db 0
 
 dateBuffer db 64 dup(0)
 dateFormat db "%02d:%02d %04d/%02d/%02d ", 0
-pathBuffer db 256 dup(0) ; ���ڼ�¼��ǰ�ļ��ѱ����·��
+pathBuffer db 256 dup(0) ; 用于记录当前文件已保存的路径
 
 ChsFont db 20 DUP(?)
 ChsStyle db 20 DUP(?)
@@ -67,8 +67,8 @@ ChsSize db 20 DUP(?)
 
 temp DWORD 0
 
-.data?                ; δ��ʼ��������������
-hInstance HINSTANCE ?        ; �����ʵ�����
+.data?                ; 未初始化变量声明区域
+hInstance HINSTANCE ?        ; 程序的实例句柄
 hMenu HMENU ?
 hFileMenu HMENU ?
 hEditMenu HMENU ?
@@ -76,20 +76,19 @@ hViewMenu HMENU ?
 hEdit HWND ?
 CommandLine LPSTR ?
 
-systemtime_buffer SYSTEMTIME <> ; ���ڴ洢ϵͳʱ��ı���
 hasSaved db, 0
-systemtime_buffer SYSTEMTIME <> ; ���ڴ洢ϵͳʱ��ı���
-
+systemtime_buffer SYSTEMTIME <> ; 用于存储系统时间的变量
+hasChanged db, 0				; 用于判断
 
 .const
-IDM_OPEN equ 1                    ; �˵�ID
+IDM_OPEN equ 1                    ; 菜单ID
 IDM_SAVE equ 2
 IDM_DATE equ 3
 IDM_FONT equ 4
 IDM_SIZE equ 5
 IDM_SAVEAS equ 6
 
-IDD_SETFONT equ 9                 ; �Ի���ID
+IDD_SETFONT equ 9                 ; 对话框ID
 IDL_SIZE equ 1004
 IDL_STYLE equ 1005
 IDL_FONT equ 1008
@@ -97,13 +96,13 @@ IDC_FONT equ 1011
 IDC_STYLE equ 1012
 IDC_FSIZE equ 1015
 
-szWarnCaption	db	'����',0
-szCreateWarnMessage	db	'CreateFile����',0
-szReadWarnMessage	db	'ReadFile����',0
+szWarnCaption	db	'错误',0
+szCreateWarnMessage	db	'CreateFile错误',0
+szReadWarnMessage	db	'ReadFile错误',0
 
-OpFonts db "Calibri", 0			  ; ��ѡ���塢���ʹ�ϸ
-		db "Kaiti", 0			  ; �����֧�����塢���ȣ��˴���Ϊdebugʾ��
-		db "MS YaHei", 0          ; ���ĺ�����䶯�������룬ChsX..X�оͻ�洢��Ӧ����
+OpFonts db "Calibri", 0			  ; 可选字体、风格和粗细
+		db "Kaiti", 0			  ; 请更改支持字体、风格等，此处仅为debug示例
+		db "MS YaHei", 0          ; 更改后无需变动其他代码，ChsX..X中就会存储对应内容
 		db "Songti", 0
 FontEnd equ $
 
@@ -118,80 +117,85 @@ OpSizes db "100", 0
 		db "400", 0
 SizeEnd equ $
 
-infoFont db '����', 0		  ; ��ʾ��Ϣ
-infoStyle db '��ϸ', 0
-infoSize db '�ֺ�', 0
+infoFont db '字体', 0		  ; 提示信息
+infoStyle db '粗细', 0
+infoSize db '字号', 0
 
 debugFont db 'Enter font', 0
 debugStyle db 'Enter style', 0
 debugSize db 'Enter size', 0
 
+saveCaption db '错误',0
+saveMessage db '是否要保存当前文件', 0
+
+editId WORD 101
+
 .code                ; Here begins our code
 start:
-invoke GetModuleHandle, NULL            ; ��ȡ�����ʵ�����
+invoke GetModuleHandle, NULL            ; 获取程序的实例句柄
 
 mov hInstance,eax
-invoke GetCommandLine                        ; ��ȡ�����в���
+invoke GetCommandLine                        ; 获取命令行参数
 
 mov CommandLine,eax
-invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT        ; ����WinMain����
-invoke ExitProcess, eax                           ; �˳�����
+invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT        ; 调用WinMain函数
+invoke ExitProcess, eax                           ; 退出程序
 
 SaveFile proc fileName:DWORD, nameLength:DWORD, dwBytesWritten:DWORD, hFile:HANDLE
 	; Try to open file
 	invoke CreateFile, fileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
 	mov hFile, eax
 	.if hFile != INVALID_HANDLE_VALUE
-		; �޸ı�����Ϣ
+		; 修改保存信息
 		mov ecx, nameLength
 		mov esi, fileName
 		mov edi, offset pathBuffer
 		rep movsb
 		mov hasSaved, 1
 
-		; ѡ��༭���е������ı�
+		; 选择编辑框中的所有文本
 		invoke SendMessage, hEdit, EM_SETSEL, 0, -1
 
-		; ��ȡѡ���ı�����ʼ�ͽ���λ��
+		; 获取选中文本的起始和结束位置
 		invoke SendMessage, hEdit, EM_GETSEL, addr strStart, addr strEnd
 
-		; ����ѡ���ı��ĳ���
+		; 计算选中文本的长度
 		mov eax, strEnd
 		sub eax, strStart
 
-		; �����㹻���ڴ����洢ѡ���ı�
+		; 分配足够的内存来存储选中文本
 		inc eax
 		invoke GlobalAlloc, GMEM_ZEROINIT, eax
 		mov hGlobal, eax
 
-		; ����ȫ���ڴ沢��ȡ��ָ��
+		; 锁定全局内存并获取其指针
 		invoke GlobalLock, hGlobal
 		mov lpText, eax
 
-		; ��ȡѡ���ı�
+		; 获取选中文本
 		mov eax, strEnd
 		sub eax, strStart
 		inc eax
 		invoke GetWindowText, hEdit, lpText, eax
 
-		; ����ȫ���ڴ�
+		; 解锁全局内存
 		invoke GlobalUnlock, hGlobal
 
-		; ����
+		; 保存
 		mov ecx, strEnd
 		sub ecx, strStart
 		invoke WriteFile, hFile, lpText, ecx, addr dwBytesWritten, 0
 
-		; �ͷ�ȫ���ڴ�
+		; 释放全局内存
 		invoke GlobalFree, hGlobal
 					
-		; �ر��ļ����
+		; 关闭文件句柄
 		invoke CloseHandle, hFile
 
-		; ������ƶ���ĩβ
+		; 将光标移动到末尾
 		invoke SendMessage, hEdit, EM_SETSEL, -1, -1
 
-		; ���ý���
+		; 设置焦点
 		invoke SetFocus, hEdit
 		.else
 			invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
@@ -200,24 +204,24 @@ SaveFile proc fileName:DWORD, nameLength:DWORD, dwBytesWritten:DWORD, hFile:HAND
 SaveFile endp
 
 CheckFileNameExtension proc lpFileName:DWORD, lpDefExt:DWORD
-    ; Ѱ���ļ����е����һ����б��
+    ; 寻找文件名中的最后一个反斜杠
     invoke StrRChr, lpFileName, 0, '\\'
     mov ecx, eax
 
-    ; ����ҵ���б�ܣ��ƶ�����һ���ַ�
+    ; 如果找到反斜杠，移动到下一个字符
     .if ecx != 0
         inc ecx
     .else
         mov ecx, lpFileName
     .endif
 
-    ; Ѱ���ļ����е����һ�����
+    ; 寻找文件名中的最后一个点号
     invoke StrRChr, ecx, 0, '.'
     .if eax == 0
-        ; ���û�е�ţ�����Ƿ����ͬ���ļ���
+        ; 如果没有点号，检查是否存在同名文件夹
         invoke PathIsDirectory, lpFileName
         .if eax == FALSE
-            ; ��������ļ��У�׷��Ĭ����չ��
+            ; 如果不是文件夹，追加默认扩展名
             invoke lstrcat, lpFileName, lpDefExt
         .endif
     .endif
@@ -225,13 +229,45 @@ CheckFileNameExtension proc lpFileName:DWORD, lpDefExt:DWORD
     ret
 CheckFileNameExtension endp
 
+HandleUnsaved proc hWnd:HWND, bytesRead:DWORD, hFile:HANDLE, dwBytesWritten:DWORD, ofn:OPENFILENAME
+	invoke	RtlZeroMemory, addr ofn, sizeof ofn
+	.if hasSaved==0
+		mov	ofn.lStructSize,sizeof ofn
+		push	hWnd
+		pop	ofn.hwndOwner
+		mov	ofn.lpstrFilter, offset szFilter
+		mov	ofn.lpstrFile, offset szFileName
+		mov ofn.lpstrDefExt, offset szDefExt
+		mov	ofn.nMaxFile, MAX_PATH
+		mov ofn.Flags, OFN_OVERWRITEPROMPT
+		invoke	GetSaveFileName, addr ofn
+		.if	eax
+			invoke CheckFileNameExtension, addr szFileName, offset szDefExt
+			mov eax, ofn.lpstrFile
+			mov esi, eax
+			xor ecx, ecx
+			.while byte ptr [esi] != 0 ;Get the name of file to be open
+				mov al, byte ptr [esi]
+				mov byte ptr [szFileName + ecx], al
+				inc esi
+				inc ecx
+			.endw
+			invoke SaveFile, addr szFileName, LENGTHOF szFileName, dwBytesWritten, hFile
+		.endif
+	.else
+		invoke SaveFile, addr pathBuffer, LENGTHOF szFileName, dwBytesWritten, hFile
+	.endif
+	mov hasChanged, 0
+	ret
+HandleUnsaved endp
+
 WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
-    LOCAL wc:WNDCLASSEX                                            ; ����stack�ϵĳ�ʼ����
+    LOCAL wc:WNDCLASSEX                                            ; 创建stack上的初始变量
     LOCAL msg:MSG
     LOCAL hwnd:HWND
 	LOCAL rect:RECT
 
-    mov   wc.cbSize,SIZEOF WNDCLASSEX                   ; Ϊwc��Ա�������ó�ʼֵ
+    mov   wc.cbSize,SIZEOF WNDCLASSEX                   ; 为wc成员变量设置初始值
     mov   wc.style, CS_HREDRAW or CS_VREDRAW
     mov   wc.lpfnWndProc, OFFSET WndProc
     mov   wc.cbClsExtra,NULL
@@ -247,29 +283,29 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     invoke LoadCursor,NULL,IDC_ARROW
     mov   wc.hCursor,eax
 
-	;�˵���
+	;菜单栏
 	invoke CreateMenu
     mov hMenu, eax
 
 	invoke CreatePopupMenu
-    mov hFileMenu, eax ; �ļ��˵�
+    mov hFileMenu, eax ; 文件菜单
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
-	invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVEAS, OFFSET SaveAsName
+	invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveAsName
 	invoke AppendMenu, hMenu, MF_POPUP, hFileMenu, OFFSET FileName
 
 	invoke CreatePopupMenu
-    mov hEditMenu, eax ; �༭�˵�
+    mov hEditMenu, eax ; 编辑菜单
     invoke AppendMenu, hEditMenu, MF_STRING, IDM_DATE, OFFSET DateName
     invoke AppendMenu, hMenu, MF_POPUP, hEditMenu, OFFSET EditName
 
 	invoke CreatePopupMenu
-	mov hViewMenu, eax ; ��ͼ�˵�
+	mov hViewMenu, eax ; 视图菜单
     invoke AppendMenu, hViewMenu, MF_STRING, IDM_FONT, OFFSET FontName
     invoke AppendMenu, hViewMenu, MF_STRING, IDM_SIZE, OFFSET SizeName
     invoke AppendMenu, hMenu, MF_POPUP, hViewMenu, OFFSET ViewName
 
-    invoke RegisterClassEx, addr wc                       ; ע�ᴰ����
+    invoke RegisterClassEx, addr wc                       ; 注册窗口类
     invoke CreateWindowEx,NULL,\
                 ADDR ClassName,\
                 ADDR AppName,\
@@ -285,7 +321,7 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     mov   hwnd,eax
 	invoke SetMenu, hwnd, hMenu
 	
-	; ����edit�ؼ�
+	; 设置edit控件
 	invoke GetClientRect, hwnd, ADDR rect
 	push rect.bottom
 	pop clientHeight
@@ -298,30 +334,34 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
 				0, 0, \
 				clientWidth, clientHeight, \
 				hwnd, 
-				NULL, 
+				editId, 
 				hInstance, 
 				NULL
 	mov hEdit, eax
 
-    invoke ShowWindow, hwnd, CmdShow               ; ��ʾ����
-    invoke UpdateWindow, hwnd                      ; ˢ�´���
+    invoke ShowWindow, hwnd, CmdShow               ; 显示窗口
+    invoke UpdateWindow, hwnd                      ; 刷新窗口
 
-    .WHILE TRUE                                                       ; ��Ϣѭ��
+    .WHILE TRUE                                                       ; 消息循环
                 invoke GetMessage, ADDR msg,NULL,0,0
                 .BREAK .IF (!eax)
                 invoke TranslateMessage, ADDR msg
                 invoke DispatchMessage, ADDR msg
    .ENDW
-    mov     eax,msg.wParam                                            ; ����ֵ������eax��
+    mov     eax,msg.wParam                                            ; 返回值储存在eax中
     ret
 WinMain endp
 
-; �Ի�����Ϣѭ������
+; 对话框消息循环函数
 DialogProc PROC hWinDlg:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 	LOCAL hList:HANDLE
+	LOCAL bytesRead:DWORD
+	LOCAL hFile:HANDLE
+	LOCAL dwBytesWritten:DWORD
+	LOCAL ofn:OPENFILENAME
 
     .IF uMsg == WM_INITDIALOG
-        ; ����List����
+        ; 添加List内容
 		mov esi, OFFSET OpFonts
 		addFont:
 			mov ebx, esi
@@ -352,7 +392,7 @@ DialogProc PROC hWinDlg:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 			cmp esi, SizeEnd
 			jne addSize
 
-		; ������ʾ�ı�����
+		; 设置提示文本内容
 		invoke GetDlgItem, hWinDlg, IDC_FONT
 		invoke SetWindowText, eax, OFFSET infoFont
 
@@ -365,8 +405,8 @@ DialogProc PROC hWinDlg:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 		mov eax, 1
     .ELSEIF uMsg == WM_COMMAND
         .IF wParam == IDOK
-			; TODO: ����edit�ؼ�����
-			; ��ǰѡ���������Ѿ���ChsX...X�б��棬ֻ�����Edit�Ľӿڼ��ɣ����ΪhEdit
+			; TODO: 更改edit控价字体
+			; 当前选定的内容已经在ChsX...X中保存，只需调用Edit的接口即可，句柄为hEdit
             invoke EndDialog, hWinDlg, 0
 		.ELSEIF wParam == IDCANCEL
 			invoke EndDialog, hWinDlg, 0
@@ -375,9 +415,9 @@ DialogProc PROC hWinDlg:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 			mov ecx, wParam
 			shr ecx, 16 
 			.IF bx == IDL_FONT && cx == LBN_SELCHANGE
-				invoke GetDlgItem, hWinDlg, IDL_FONT				; ��ȡlist���
+				invoke GetDlgItem, hWinDlg, IDL_FONT				; 获取list句柄
 				mov hList, eax
-				invoke SendMessage, hList, LB_GETCURSEL, 0, 0		; ��ȡѡ��Ԫ������
+				invoke SendMessage, hList, LB_GETCURSEL, 0, 0		; 获取选中元素项数
 				invoke SendMessage, hList, LB_GETTEXT, eax, ADDR ChsFont
 			.ELSEIF bx == IDL_STYLE && cx == LBN_SELCHANGE
 				invoke GetDlgItem, hWinDlg, IDL_STYLE				
@@ -393,8 +433,7 @@ DialogProc PROC hWinDlg:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
         .ENDIF
 	.ELSEIF uMsg == WM_CLOSE
 		invoke EndDialog, hWinDlg, 0
-
-	; TODO: ��Ӧ������¼ʱ��
+	; TODO: 响应表单记录时间
     .ENDIF
     xor eax, eax
     ret
@@ -412,7 +451,18 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     .IF uMsg==WM_DESTROY
         invoke PostQuitMessage,NULL
 
-	; �����Ӵ��ڴ�С
+	.ELSEIF uMsg==WM_CLOSE
+		.if hasChanged==1
+			invoke MessageBox, 0, addr saveMessage, addr saveCaption, MB_YESNOCANCEL
+			.if eax == IDYES
+				invoke HandleUnsaved, hWnd, bytesRead, hFile, dwBytesWritten, ofn
+			.elseif eax == IDCANCEL
+				ret
+			.endif
+		.endif
+		invoke DestroyWindow, hWnd
+
+	; 调整子窗口大小
 	.ELSEIF uMsg==WM_SIZE
 		mov eax, lParam
 		and eax, 0000FFFFh
@@ -421,13 +471,21 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 		shr eax, 16
 		mov clientHeight, eax
 
-		; ��������Edit�ؼ���С
+		; 重新设置Edit控件大小
 		invoke MoveWindow, hEdit, 0, 0, clientWidth, clientHeight, TRUE
 
-	; �˵�����Ӧ
+	; 菜单栏响应
 	.ELSEIF uMsg==WM_COMMAND
         mov eax,wParam
         .IF ax==IDM_OPEN
+			.if hasChanged==1
+				invoke MessageBox, 0, addr saveMessage, addr saveCaption, MB_YESNOCANCEL
+				.if eax == IDYES
+					invoke HandleUnsaved, hWnd, bytesRead, hFile, dwBytesWritten, ofn
+				.elseif eax == IDCANCEL
+					ret
+				.endif
+			.endif
 			invoke	RtlZeroMemory, addr ofn, sizeof ofn
 			mov	ofn.lStructSize,sizeof ofn
 			push	hWnd
@@ -441,7 +499,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				mov eax, ofn.lpstrFile
 					mov esi, eax
 					xor ecx, ecx
-				.while byte ptr [esi] != 0 ; ��ȡҪ���ļ����ļ���
+				.while byte ptr [esi] != 0 ; 获取要打开文件的文件名
 					mov al, byte ptr [esi]
 					mov byte ptr [szFileName + ecx], al
 					inc esi
@@ -453,7 +511,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				mov hFile, eax
 
 				.if hFile != INVALID_HANDLE_VALUE
-					; ���ñ��������Ϣ
+					; 设置保存相关信息
 					mov hasSaved, 1
 					mov ecx, LENGTHOF szFileName
 					mov esi, offset szFileName
@@ -466,12 +524,12 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 						mov esi, offset curText
 						mov ecx, 0
 			ClearLoop:
-						mov al, [esi + ecx]				; ��ȡ�ַ����е�һ���ַ�
-						cmp al, 0						; ����ַ��Ƿ�Ϊnull���ַ�����������
-						je EndClear						; �����null���������
-						mov byte ptr [esi + ecx], 0		; ���򣬽��ַ�����Ϊnull
-						inc ecx							; ���Ӽ�����
-						jmp ClearLoop					; ����������һ���ַ�
+						mov al, [esi + ecx]				; 读取字符串中的一个字符
+						cmp al, 0						; 检查字符是否为null（字符串结束符）
+						je EndClear						; 如果是null，结束清除
+						mov byte ptr [esi + ecx], 0		; 否则，将字符设置为null
+						inc ecx							; 增加计数器
+						jmp ClearLoop					; 继续处理下一个字符
 			EndClear:
 						mov ecx, bytesRead
 						mov curLen, ecx
@@ -480,12 +538,12 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 						mov	byte ptr [curText + esi], al
 						inc esi
 						loop CopyLoop
-						; ���ļ����������ʾ��edit�ؼ���
+						; 把文件里的内容显示到edit控件中
 
-						; ѡ�б༭���е���������
+						; 选中编辑框中的所有内容
 						invoke SendMessage, hEdit, EM_SETSEL, 0, -1
 
-						; �滻Ϊ�ļ�����
+						; 替换为文件内容
 						invoke SendMessage, hEdit, EM_REPLACESEL, TRUE, addr curText
 
 						invoke SetFocus, hEdit
@@ -500,6 +558,8 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				.endif
 			.endif
 		.ELSEIF ax==IDM_SAVE
+			invoke HandleUnsaved, hWnd, bytesRead, hFile, dwBytesWritten, ofn
+		.ELSEIF ax==IDM_SAVEAS
 			invoke	RtlZeroMemory, addr ofn, sizeof ofn
 			.if hasSaved==0
 				mov	ofn.lStructSize,sizeof ofn
@@ -527,42 +587,19 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 			.else
 				invoke SaveFile, addr pathBuffer, LENGTHOF szFileName, dwBytesWritten, hFile
 			.endif
-		.ELSEIF ax==IDM_SAVEAS
-			invoke	RtlZeroMemory, addr ofn, sizeof ofn
-			mov	ofn.lStructSize,sizeof ofn
-			push	hWnd
-			pop	ofn.hwndOwner
-			mov	ofn.lpstrFilter, offset szFilter
-			mov	ofn.lpstrFile, offset szFileName
-			mov ofn.lpstrDefExt, offset szDefExt
-			mov	ofn.nMaxFile, MAX_PATH
-			mov ofn.Flags, OFN_OVERWRITEPROMPT
-			invoke	GetSaveFileName, addr ofn
-			.if	eax
-				invoke CheckFileNameExtension, addr szFileName, offset szDefExt
-				mov eax, ofn.lpstrFile
-					mov esi, eax
-					xor ecx, ecx
-				.while byte ptr [esi] != 0 ;Get the name of file to be open
-					mov al, byte ptr [esi]
-					mov byte ptr [szFileName + ecx], al
-					inc esi
-					inc ecx
-				.endw
-				invoke SaveFile, addr szFileName, LENGTHOF szFileName, dwBytesWritten, hFile
-			.endif
+			mov hasChanged, 0
 		.ELSEIF ax==IDM_DATE
 			invoke GetLocalTime, addr systemtime_buffer
 
-			; ��ʱ���ʽ��Ϊ�ַ���
+			; 将时间格式化为字符串
 			invoke wsprintf, addr dateBuffer, addr dateFormat, systemtime_buffer.wHour, systemtime_buffer.wMinute, systemtime_buffer.wYear, systemtime_buffer.wMonth, systemtime_buffer.wDay
-			; ��ȡEdit�ؼ��ĵ�ǰ�ı�����
+			; 获取Edit控件的当前文本长度
 			invoke SendMessage, hEdit, WM_GETTEXTLENGTH, 0, 0
-			mov edx, eax  ; edx���浱ǰ�ı�����
+			mov edx, eax  ; edx保存当前文本长度
 
 			mov esi, offset dateBuffer
 
-			; �����㹻���ڴ����洢��ǰ�ı���Ҫ��������ı�
+			; 分配足够的内存来存储当前文本和要插入的新文本
 			add edx, 17  ;
 			invoke GlobalAlloc, GMEM_ZEROINIT, edx
 			mov edi, eax
@@ -571,14 +608,18 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
 			invoke lstrcat, edi, esi
 
-			; �����ı�д��Edit�ؼ�
+			; 将新文本写入Edit控件
 			invoke SendMessage, hEdit, EM_REPLACESEL, TRUE, edi
 
-			; �ͷ��·�����ڴ�
+			; 释放新分配的内存
 			invoke GlobalFree, edi
 			.ELSEIF ax==IDM_FONT
 				invoke DialogBoxParam, hInstance, IDD_SETFONT, NULL, ADDR DialogProc, 0
-
+		.ELSEIF ax==editId
+			shr eax, 16 
+			.if ax==EN_CHANGE
+				mov hasChanged, 1
+			.endif
         .ENDIF
     .ELSE
         invoke DefWindowProc,hWnd,uMsg,wParam,lParam
