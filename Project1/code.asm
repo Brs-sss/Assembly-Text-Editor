@@ -265,7 +265,6 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
 	invoke CreatePopupMenu
 	mov hViewMenu, eax ; 视图菜单
     invoke AppendMenu, hViewMenu, MF_STRING, IDM_FONT, OFFSET FontName
-    invoke AppendMenu, hViewMenu, MF_STRING, IDM_SIZE, OFFSET SizeName
     invoke AppendMenu, hMenu, MF_POPUP, hViewMenu, OFFSET ViewName
 
     invoke RegisterClassEx, addr wc                       ; 注册窗口类
