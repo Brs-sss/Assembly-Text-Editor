@@ -13,6 +13,10 @@ includelib kernel32.lib
 includelib comdlg32.lib
 includelib gdi32.lib
 includelib shlwapi.lib
+
+includelib      msvcrt.lib
+include         msvcrt.inc
+
 WinMain proto :DWORD,:DWORD,:DWORD,:DWORD
 
 .data                     ; initialized data
@@ -33,7 +37,7 @@ SizeName db "Size",0
 
 szFileName	db	MAX_PATH dup (0)
 pBuffer db 4096 dup(0)
-szDefExt db "txt",0 ; ÉèÖÃÄ¬ÈÏÀ©Õ¹Ãû
+szDefExt db "txt",0 ; ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½ï¿½ï¿½ï¿½Õ¹ï¿½ï¿½
 szFilter	db	'Text Files(*.txt)',0,'*.txt',0,'All Files(*.*)',0,'*.*',0,0
 
 EditClassName db "EDIT"
@@ -47,18 +51,24 @@ curText BYTE "nothing", 1000 DUP(0)
 curLen DWORD 7
 char WPARAM 20h 
 
-hGlobal    dd 0           ; È«¾ÖÄÚ´æ¾ä±ú
-lpText     dd 0           ; ÎÄ±¾»º³åÇøÖ¸Õë
+hGlobal    dd 0           ; È«ï¿½ï¿½ï¿½Ú´ï¿½ï¿½ï¿½
+lpText     dd 0           ; ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½
 strStart   DWORD 0
 strEnd     DWORD 0
 emptyString db 0
 
 dateBuffer db 64 dup(0)
 dateFormat db "%02d:%02d %04d/%02d/%02d ", 0
-pathBuffer db 256 dup(0) ; ÓÃÓÚ¼ÇÂ¼µ±Ç°ÎÄ¼þÒÑ±£´æµÄÂ·¾¶
+pathBuffer db 256 dup(0) ; ï¿½ï¿½ï¿½Ú¼ï¿½Â¼ï¿½ï¿½Ç°ï¿½Ä¼ï¿½ï¿½Ñ±ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½
 
-.data?                ; Î´³õÊ¼»¯±äÁ¿ÉùÃ÷ÇøÓò
-hInstance HINSTANCE ?        ; ³ÌÐòµÄÊµÀý¾ä±ú
+ChsFont db 20 DUP(?)
+ChsStyle db 20 DUP(?)
+ChsSize db 20 DUP(?)
+
+temp DWORD 0
+
+.data?                ; Î´ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+hInstance HINSTANCE ?        ; ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½
 hMenu HMENU ?
 hFileMenu HMENU ?
 hEditMenu HMENU ?
@@ -66,88 +76,122 @@ hViewMenu HMENU ?
 hEdit HWND ?
 CommandLine LPSTR ?
 
-systemtime_buffer SYSTEMTIME <> ; ÓÃÓÚ´æ´¢ÏµÍ³Ê±¼äµÄ±äÁ¿
+systemtime_buffer SYSTEMTIME <> ; ï¿½ï¿½ï¿½Ú´æ´¢ÏµÍ³Ê±ï¿½ï¿½Ä±ï¿½ï¿½ï¿½
 hasSaved db, 0
+systemtime_buffer SYSTEMTIME <> ; ï¿½ï¿½ï¿½Ú´æ´¢ÏµÍ³Ê±ï¿½ï¿½Ä±ï¿½ï¿½ï¿½
+
 
 .const
-IDM_OPEN equ 1                    ; ²Ëµ¥ID
+IDM_OPEN equ 1                    ; ï¿½Ëµï¿½ID
 IDM_SAVE equ 2
 IDM_DATE equ 3
 IDM_FONT equ 4
 IDM_SIZE equ 5
 IDM_SAVEAS equ 6
 
-szWarnCaption	db	'´íÎó',0
-szCreateWarnMessage	db	'CreateFile´íÎó',0
-szReadWarnMessage	db	'ReadFile´íÎó',0
+IDD_SETFONT equ 9                 ; ï¿½Ô»ï¿½ï¿½ï¿½ID
+IDL_SIZE equ 1004
+IDL_STYLE equ 1005
+IDL_FONT equ 1008
+IDC_FONT equ 1011
+IDC_STYLE equ 1012
+IDC_FSIZE equ 1015
 
+szWarnCaption	db	'ï¿½ï¿½ï¿½ï¿½',0
+szCreateWarnMessage	db	'CreateFileï¿½ï¿½ï¿½ï¿½',0
+szReadWarnMessage	db	'ReadFileï¿½ï¿½ï¿½ï¿½',0
+
+OpFonts db "Calibri", 0			  ; ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½å¡¢ï¿½ï¿½ï¿½Í´ï¿½Ï¸
+		db "Kaiti", 0			  ; ï¿½ï¿½ï¿½ï¿½ï¿½Ö§ï¿½ï¿½ï¿½ï¿½ï¿½å¡¢ï¿½ï¿½ï¿½È£ï¿½ï¿½Ë´ï¿½ï¿½ï¿½ÎªdebugÊ¾ï¿½ï¿½
+		db "MS YaHei", 0          ; ï¿½ï¿½ï¿½Äºï¿½ï¿½ï¿½ï¿½ï¿½ä¶¯ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ë£¬ChsX..Xï¿½Ð¾Í»ï¿½æ´¢ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½
+		db "Songti", 0
+FontEnd equ $
+
+OpStyles db "bold", 0
+		 db "light", 0
+		 db "regular", 0
+StyleEnd equ $
+
+OpSizes db "100", 0
+		db "200", 0
+		db "300", 0
+		db "400", 0
+SizeEnd equ $
+
+infoFont db 'ï¿½ï¿½ï¿½ï¿½', 0		  ; ï¿½ï¿½Ê¾ï¿½ï¿½Ï¢
+infoStyle db 'ï¿½ï¿½Ï¸', 0
+infoSize db 'ï¿½Öºï¿½', 0
+
+debugFont db 'Enter font', 0
+debugStyle db 'Enter style', 0
+debugSize db 'Enter size', 0
 
 .code                ; Here begins our code
 start:
-invoke GetModuleHandle, NULL            ; »ñÈ¡³ÌÐòµÄÊµÀý¾ä±ú
+invoke GetModuleHandle, NULL            ; ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ï¿½
 
 mov hInstance,eax
-invoke GetCommandLine                        ; »ñÈ¡ÃüÁîÐÐ²ÎÊý
+invoke GetCommandLine                        ; ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½Ð²ï¿½ï¿½ï¿½
 
 mov CommandLine,eax
-invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT        ; µ÷ÓÃWinMainº¯Êý
-invoke ExitProcess, eax                           ; ÍË³ö³ÌÐò
+invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT        ; ï¿½ï¿½ï¿½ï¿½WinMainï¿½ï¿½ï¿½ï¿½
+invoke ExitProcess, eax                           ; ï¿½Ë³ï¿½ï¿½ï¿½ï¿½ï¿½
 
 SaveFile proc fileName:DWORD, nameLength:DWORD, dwBytesWritten:DWORD, hFile:HANDLE
 	; Try to open file
 	invoke CreateFile, fileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
 	mov hFile, eax
 	.if hFile != INVALID_HANDLE_VALUE
-		; ÐÞ¸Ä±£´æÐÅÏ¢
+		; ï¿½Þ¸Ä±ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 		mov ecx, nameLength
 		mov esi, fileName
 		mov edi, offset pathBuffer
 		rep movsb
 		mov hasSaved, 1
 
-		; Ñ¡Ôñ±à¼­¿òÖÐµÄËùÓÐÎÄ±¾
+		; Ñ¡ï¿½ï¿½à¼­ï¿½ï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½
 		invoke SendMessage, hEdit, EM_SETSEL, 0, -1
 
-		; »ñÈ¡Ñ¡ÖÐÎÄ±¾µÄÆðÊ¼ºÍ½áÊøÎ»ÖÃ
+		; ï¿½ï¿½È¡Ñ¡ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½Í½ï¿½ï¿½ï¿½Î»ï¿½ï¿½
 		invoke SendMessage, hEdit, EM_GETSEL, addr strStart, addr strEnd
 
-		; ¼ÆËãÑ¡ÖÐÎÄ±¾µÄ³¤¶È
+		; ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½Ä±ï¿½ï¿½Ä³ï¿½ï¿½ï¿½
 		mov eax, strEnd
 		sub eax, strStart
 
-		; ·ÖÅä×ã¹»µÄÄÚ´æÀ´´æ´¢Ñ¡ÖÐÎÄ±¾
+		; ï¿½ï¿½ï¿½ï¿½ï¿½ã¹»ï¿½ï¿½ï¿½Ú´ï¿½ï¿½ï¿½ï¿½æ´¢Ñ¡ï¿½ï¿½ï¿½Ä±ï¿½
 		inc eax
 		invoke GlobalAlloc, GMEM_ZEROINIT, eax
 		mov hGlobal, eax
 
-		; Ëø¶¨È«¾ÖÄÚ´æ²¢»ñÈ¡ÆäÖ¸Õë
+		; ï¿½ï¿½ï¿½ï¿½È«ï¿½ï¿½ï¿½Ú´æ²¢ï¿½ï¿½È¡ï¿½ï¿½Ö¸ï¿½ï¿½
 		invoke GlobalLock, hGlobal
 		mov lpText, eax
 
-		; »ñÈ¡Ñ¡ÖÐÎÄ±¾
+		; ï¿½ï¿½È¡Ñ¡ï¿½ï¿½ï¿½Ä±ï¿½
 		mov eax, strEnd
 		sub eax, strStart
 		inc eax
 		invoke GetWindowText, hEdit, lpText, eax
 
-		; ½âËøÈ«¾ÖÄÚ´æ
+		; ï¿½ï¿½ï¿½ï¿½È«ï¿½ï¿½ï¿½Ú´ï¿½
 		invoke GlobalUnlock, hGlobal
 
-		; ±£´æ
+		; ï¿½ï¿½ï¿½ï¿½
 		mov ecx, strEnd
 		sub ecx, strStart
 		invoke WriteFile, hFile, lpText, ecx, addr dwBytesWritten, 0
 
-		; ÊÍ·ÅÈ«¾ÖÄÚ´æ
+		; ï¿½Í·ï¿½È«ï¿½ï¿½ï¿½Ú´ï¿½
 		invoke GlobalFree, hGlobal
 					
-		; ¹Ø±ÕÎÄ¼þ¾ä±ú
+		; ï¿½Ø±ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½
 		invoke CloseHandle, hFile
 
-		; ½«¹â±êÒÆ¶¯µ½Ä©Î²
+		; ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¶ï¿½ï¿½ï¿½Ä©Î²
 		invoke SendMessage, hEdit, EM_SETSEL, -1, -1
 
-		; ÉèÖÃ½¹µã
+		; ï¿½ï¿½ï¿½Ã½ï¿½ï¿½ï¿½
 		invoke SetFocus, hEdit
 		.else
 			invoke MessageBox, 0, addr szCreateWarnMessage, addr szWarnCaption, MB_ICONERROR or MB_OK
@@ -156,24 +200,24 @@ SaveFile proc fileName:DWORD, nameLength:DWORD, dwBytesWritten:DWORD, hFile:HAND
 SaveFile endp
 
 CheckFileNameExtension proc lpFileName:DWORD, lpDefExt:DWORD
-    ; Ñ°ÕÒÎÄ¼þÃûÖÐµÄ×îºóÒ»¸ö·´Ð±¸Ü
+    ; Ñ°ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Ð±ï¿½ï¿½
     invoke StrRChr, lpFileName, 0, '\\'
     mov ecx, eax
 
-    ; Èç¹ûÕÒµ½·´Ð±¸Ü£¬ÒÆ¶¯µ½ÏÂÒ»¸ö×Ö·û
+    ; ï¿½ï¿½ï¿½ï¿½Òµï¿½ï¿½ï¿½Ð±ï¿½Ü£ï¿½ï¿½Æ¶ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Ö·ï¿½
     .if ecx != 0
         inc ecx
     .else
         mov ecx, lpFileName
     .endif
 
-    ; Ñ°ÕÒÎÄ¼þÃûÖÐµÄ×îºóÒ»¸öµãºÅ
+    ; Ñ°ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½
     invoke StrRChr, ecx, 0, '.'
     .if eax == 0
-        ; Èç¹ûÃ»ÓÐµãºÅ£¬¼ì²éÊÇ·ñ´æÔÚÍ¬ÃûÎÄ¼þ¼Ð
+        ; ï¿½ï¿½ï¿½Ã»ï¿½Ðµï¿½Å£ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½
         invoke PathIsDirectory, lpFileName
         .if eax == FALSE
-            ; Èç¹û²»ÊÇÎÄ¼þ¼Ð£¬×·¼ÓÄ¬ÈÏÀ©Õ¹Ãû
+            ; ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½Ð£ï¿½×·ï¿½ï¿½Ä¬ï¿½ï¿½ï¿½ï¿½Õ¹ï¿½ï¿½
             invoke lstrcat, lpFileName, lpDefExt
         .endif
     .endif
@@ -182,12 +226,12 @@ CheckFileNameExtension proc lpFileName:DWORD, lpDefExt:DWORD
 CheckFileNameExtension endp
 
 WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
-    LOCAL wc:WNDCLASSEX                                            ; ´´½¨stackÉÏµÄ³õÊ¼±äÁ¿
+    LOCAL wc:WNDCLASSEX                                            ; ï¿½ï¿½ï¿½ï¿½stackï¿½ÏµÄ³ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½
     LOCAL msg:MSG
     LOCAL hwnd:HWND
 	LOCAL rect:RECT
 
-    mov   wc.cbSize,SIZEOF WNDCLASSEX                   ; Îªwc³ÉÔ±±äÁ¿ÉèÖÃ³õÊ¼Öµ
+    mov   wc.cbSize,SIZEOF WNDCLASSEX                   ; Îªwcï¿½ï¿½Ô±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã³ï¿½Ê¼Öµ
     mov   wc.style, CS_HREDRAW or CS_VREDRAW
     mov   wc.lpfnWndProc, OFFSET WndProc
     mov   wc.cbClsExtra,NULL
@@ -203,29 +247,29 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     invoke LoadCursor,NULL,IDC_ARROW
     mov   wc.hCursor,eax
 
-	;²Ëµ¥À¸
+	;ï¿½Ëµï¿½ï¿½ï¿½
 	invoke CreateMenu
     mov hMenu, eax
 
 	invoke CreatePopupMenu
-    mov hFileMenu, eax ; ÎÄ¼þ²Ëµ¥
+    mov hFileMenu, eax ; ï¿½Ä¼ï¿½ï¿½Ëµï¿½
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
 	invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVEAS, OFFSET SaveAsName
 	invoke AppendMenu, hMenu, MF_POPUP, hFileMenu, OFFSET FileName
 
 	invoke CreatePopupMenu
-    mov hEditMenu, eax ; ±à¼­²Ëµ¥
+    mov hEditMenu, eax ; ï¿½à¼­ï¿½Ëµï¿½
     invoke AppendMenu, hEditMenu, MF_STRING, IDM_DATE, OFFSET DateName
     invoke AppendMenu, hMenu, MF_POPUP, hEditMenu, OFFSET EditName
 
 	invoke CreatePopupMenu
-	mov hViewMenu, eax ; ÊÓÍ¼²Ëµ¥
+	mov hViewMenu, eax ; ï¿½ï¿½Í¼ï¿½Ëµï¿½
     invoke AppendMenu, hViewMenu, MF_STRING, IDM_FONT, OFFSET FontName
     invoke AppendMenu, hViewMenu, MF_STRING, IDM_SIZE, OFFSET SizeName
     invoke AppendMenu, hMenu, MF_POPUP, hViewMenu, OFFSET ViewName
 
-    invoke RegisterClassEx, addr wc                       ; ×¢²á´°¿ÚÀà
+    invoke RegisterClassEx, addr wc                       ; ×¢ï¿½á´°ï¿½ï¿½ï¿½ï¿½
     invoke CreateWindowEx,NULL,\
                 ADDR ClassName,\
                 ADDR AppName,\
@@ -241,7 +285,7 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     mov   hwnd,eax
 	invoke SetMenu, hwnd, hMenu
 	
-	; ÉèÖÃedit¿Ø¼þ
+	; ï¿½ï¿½ï¿½ï¿½editï¿½Ø¼ï¿½
 	invoke GetClientRect, hwnd, ADDR rect
 	push rect.bottom
 	pop clientHeight
@@ -259,18 +303,102 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
 				NULL
 	mov hEdit, eax
 
-    invoke ShowWindow, hwnd, CmdShow               ; ÏÔÊ¾´°¿Ú
-    invoke UpdateWindow, hwnd                      ; Ë¢ÐÂ´°¿Ú
+    invoke ShowWindow, hwnd, CmdShow               ; ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½
+    invoke UpdateWindow, hwnd                      ; Ë¢ï¿½Â´ï¿½ï¿½ï¿½
 
-    .WHILE TRUE                                                       ; ÏûÏ¢Ñ­»·
+    .WHILE TRUE                                                       ; ï¿½ï¿½Ï¢Ñ­ï¿½ï¿½
                 invoke GetMessage, ADDR msg,NULL,0,0
                 .BREAK .IF (!eax)
                 invoke TranslateMessage, ADDR msg
                 invoke DispatchMessage, ADDR msg
    .ENDW
-    mov     eax,msg.wParam                                            ; ·µ»ØÖµ´¢´æÔÚeaxÖÐ
+    mov     eax,msg.wParam                                            ; ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½eaxï¿½ï¿½
     ret
 WinMain endp
+
+; ï¿½Ô»ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢Ñ­ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+DialogProc PROC hWinDlg:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
+	LOCAL hList:HANDLE
+
+    .IF uMsg == WM_INITDIALOG
+        ; ï¿½ï¿½ï¿½ï¿½Listï¿½ï¿½ï¿½ï¿½
+		mov esi, OFFSET OpFonts
+		addFont:
+			mov ebx, esi
+			invoke SendDlgItemMessage, hWinDlg, IDL_FONT, LB_ADDSTRING, 0, ebx
+			invoke crt_strlen, ebx
+			add esi, eax
+			inc esi
+			cmp esi, FontEnd
+			jne addFont
+
+		mov esi, OFFSET OpStyles
+		addStyle:
+			mov ebx, esi
+			invoke SendDlgItemMessage, hWinDlg, IDL_STYLE, LB_ADDSTRING, 0, ebx
+			invoke crt_strlen, ebx
+			add esi, eax
+			inc esi
+			cmp esi, StyleEnd
+			jne addStyle
+
+		mov esi, OFFSET OpSizes
+		addSize:
+			mov ebx, esi
+			invoke SendDlgItemMessage, hWinDlg, IDL_SIZE, LB_ADDSTRING, 0, ebx
+			invoke crt_strlen, ebx
+			add esi, eax
+			inc esi
+			cmp esi, SizeEnd
+			jne addSize
+
+		; ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½
+		invoke GetDlgItem, hWinDlg, IDC_FONT
+		invoke SetWindowText, eax, OFFSET infoFont
+
+		invoke GetDlgItem, hWinDlg, IDC_STYLE
+		invoke SetWindowText, eax, OFFSET infoStyle
+
+		invoke GetDlgItem, hWinDlg, IDC_FSIZE
+		invoke SetWindowText, eax, OFFSET infoSize
+
+		mov eax, 1
+    .ELSEIF uMsg == WM_COMMAND
+        .IF wParam == IDOK
+			; TODO: ï¿½ï¿½ï¿½ï¿½editï¿½Ø¼ï¿½ï¿½ï¿½ï¿½ï¿½
+			; ï¿½ï¿½Ç°Ñ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½ChsX...Xï¿½Ð±ï¿½ï¿½æ£¬Ö»ï¿½ï¿½ï¿½ï¿½ï¿½Editï¿½Ä½Ó¿Ú¼ï¿½ï¿½É£ï¿½ï¿½ï¿½ï¿½ÎªhEdit
+            invoke EndDialog, hWinDlg, 0
+		.ELSEIF wParam == IDCANCEL
+			invoke EndDialog, hWinDlg, 0
+		.ELSE
+			mov ebx, wParam
+			mov ecx, wParam
+			shr ecx, 16 
+			.IF bx == IDL_FONT && cx == LBN_SELCHANGE
+				invoke GetDlgItem, hWinDlg, IDL_FONT				; ï¿½ï¿½È¡listï¿½ï¿½ï¿½
+				mov hList, eax
+				invoke SendMessage, hList, LB_GETCURSEL, 0, 0		; ï¿½ï¿½È¡Ñ¡ï¿½ï¿½Ôªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+				invoke SendMessage, hList, LB_GETTEXT, eax, ADDR ChsFont
+			.ELSEIF bx == IDL_STYLE && cx == LBN_SELCHANGE
+				invoke GetDlgItem, hWinDlg, IDL_STYLE				
+				mov hList, eax
+				invoke SendMessage, hList, LB_GETCURSEL, 0, 0
+				invoke SendMessage, hList, LB_GETTEXT, eax, ADDR ChsStyle
+			.ELSEIF bx == IDL_SIZE && cx == LBN_SELCHANGE
+				invoke GetDlgItem, hWinDlg, IDL_SIZE				
+				mov hList, eax
+				invoke SendMessage, hList, LB_GETCURSEL, 0, 0
+				invoke SendMessage, hList, LB_GETTEXT, eax, ADDR ChsSize
+			.ENDIF
+        .ENDIF
+	.ELSEIF uMsg == WM_CLOSE
+		invoke EndDialog, hWinDlg, 0
+
+	; TODO: ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼Ê±ï¿½ï¿½
+    .ENDIF
+    xor eax, eax
+    ret
+DialogProc ENDP
 
 WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     LOCAL hdc:HDC
@@ -284,7 +412,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
     .IF uMsg==WM_DESTROY
         invoke PostQuitMessage,NULL
 
-	; µ÷Õû×Ó´°¿Ú´óÐ¡
+	; ï¿½ï¿½ï¿½ï¿½ï¿½Ó´ï¿½ï¿½Ú´ï¿½Ð¡
 	.ELSEIF uMsg==WM_SIZE
 		mov eax, lParam
 		and eax, 0000FFFFh
@@ -293,10 +421,10 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 		shr eax, 16
 		mov clientHeight, eax
 
-		; ÖØÐÂÉèÖÃEdit¿Ø¼þ´óÐ¡
+		; ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Editï¿½Ø¼ï¿½ï¿½ï¿½Ð¡
 		invoke MoveWindow, hEdit, 0, 0, clientWidth, clientHeight, TRUE
 
-	; ²Ëµ¥À¸ÏìÓ¦
+	; ï¿½Ëµï¿½ï¿½ï¿½ï¿½ï¿½Ó¦
 	.ELSEIF uMsg==WM_COMMAND
         mov eax,wParam
         .IF ax==IDM_OPEN
@@ -313,7 +441,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				mov eax, ofn.lpstrFile
 					mov esi, eax
 					xor ecx, ecx
-				.while byte ptr [esi] != 0 ; »ñÈ¡Òª´ò¿ªÎÄ¼þµÄÎÄ¼þÃû
+				.while byte ptr [esi] != 0 ; ï¿½ï¿½È¡Òªï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½
 					mov al, byte ptr [esi]
 					mov byte ptr [szFileName + ecx], al
 					inc esi
@@ -325,7 +453,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 				mov hFile, eax
 
 				.if hFile != INVALID_HANDLE_VALUE
-					; ÉèÖÃ±£´æÏà¹ØÐÅÏ¢
+					; ï¿½ï¿½ï¿½Ã±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 					mov hasSaved, 1
 					mov ecx, LENGTHOF szFileName
 					mov esi, offset szFileName
@@ -338,12 +466,12 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 						mov esi, offset curText
 						mov ecx, 0
 			ClearLoop:
-						mov al, [esi + ecx]				; ¶ÁÈ¡×Ö·û´®ÖÐµÄÒ»¸ö×Ö·û
-						cmp al, 0						; ¼ì²é×Ö·ûÊÇ·ñÎªnull£¨×Ö·û´®½áÊø·û£©
-						je EndClear						; Èç¹ûÊÇnull£¬½áÊøÇå³ý
-						mov byte ptr [esi + ecx], 0		; ·ñÔò£¬½«×Ö·ûÉèÖÃÎªnull
-						inc ecx							; Ôö¼Ó¼ÆÊýÆ÷
-						jmp ClearLoop					; ¼ÌÐø´¦ÀíÏÂÒ»¸ö×Ö·û
+						mov al, [esi + ecx]				; ï¿½ï¿½È¡ï¿½Ö·ï¿½ï¿½ï¿½ï¿½Ðµï¿½Ò»ï¿½ï¿½ï¿½Ö·ï¿½
+						cmp al, 0						; ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½Ç·ï¿½Îªnullï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+						je EndClear						; ï¿½ï¿½ï¿½ï¿½ï¿½nullï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+						mov byte ptr [esi + ecx], 0		; ï¿½ï¿½ï¿½ò£¬½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½Îªnull
+						inc ecx							; ï¿½ï¿½ï¿½Ó¼ï¿½ï¿½ï¿½ï¿½ï¿½
+						jmp ClearLoop					; ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Ö·ï¿½
 			EndClear:
 						mov ecx, bytesRead
 						mov curLen, ecx
@@ -352,12 +480,12 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 						mov	byte ptr [curText + esi], al
 						inc esi
 						loop CopyLoop
-						; °ÑÎÄ¼þÀïµÄÄÚÈÝÏÔÊ¾µ½edit¿Ø¼þÖÐ
+						; ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½editï¿½Ø¼ï¿½ï¿½ï¿½
 
-						; Ñ¡ÖÐ±à¼­¿òÖÐµÄËùÓÐÄÚÈÝ
+						; Ñ¡ï¿½Ð±à¼­ï¿½ï¿½ï¿½Ðµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 						invoke SendMessage, hEdit, EM_SETSEL, 0, -1
 
-						; Ìæ»»ÎªÎÄ¼þÄÚÈÝ
+						; ï¿½æ»»Îªï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½
 						invoke SendMessage, hEdit, EM_REPLACESEL, TRUE, addr curText
 
 						invoke SetFocus, hEdit
@@ -426,15 +554,15 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 		.ELSEIF ax==IDM_DATE
 			invoke GetLocalTime, addr systemtime_buffer
 
-			; ½«Ê±¼ä¸ñÊ½»¯Îª×Ö·û´®
+			; ï¿½ï¿½Ê±ï¿½ï¿½ï¿½Ê½ï¿½ï¿½Îªï¿½Ö·ï¿½ï¿½ï¿½
 			invoke wsprintf, addr dateBuffer, addr dateFormat, systemtime_buffer.wHour, systemtime_buffer.wMinute, systemtime_buffer.wYear, systemtime_buffer.wMonth, systemtime_buffer.wDay
-			; »ñÈ¡Edit¿Ø¼þµÄµ±Ç°ÎÄ±¾³¤¶È
+			; ï¿½ï¿½È¡Editï¿½Ø¼ï¿½ï¿½Äµï¿½Ç°ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½
 			invoke SendMessage, hEdit, WM_GETTEXTLENGTH, 0, 0
-			mov edx, eax  ; edx±£´æµ±Ç°ÎÄ±¾³¤¶È
+			mov edx, eax  ; edxï¿½ï¿½ï¿½æµ±Ç°ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½
 
 			mov esi, offset dateBuffer
 
-			; ·ÖÅä×ã¹»µÄÄÚ´æÀ´´æ´¢µ±Ç°ÎÄ±¾ºÍÒª²åÈëµÄÐÂÎÄ±¾
+			; ï¿½ï¿½ï¿½ï¿½ï¿½ã¹»ï¿½ï¿½ï¿½Ú´ï¿½ï¿½ï¿½ï¿½æ´¢ï¿½ï¿½Ç°ï¿½Ä±ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½
 			add edx, 17  ;
 			invoke GlobalAlloc, GMEM_ZEROINIT, edx
 			mov edi, eax
@@ -443,11 +571,13 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 
 			invoke lstrcat, edi, esi
 
-			; ½«ÐÂÎÄ±¾Ð´ÈëEdit¿Ø¼þ
+			; ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½Ð´ï¿½ï¿½Editï¿½Ø¼ï¿½
 			invoke SendMessage, hEdit, EM_REPLACESEL, TRUE, edi
 
-			; ÊÍ·ÅÐÂ·ÖÅäµÄÄÚ´æ
+			; ï¿½Í·ï¿½ï¿½Â·ï¿½ï¿½ï¿½ï¿½ï¿½Ú´ï¿½
 			invoke GlobalFree, edi
+			.ELSEIF ax==IDM_FONT
+				invoke DialogBoxParam, hInstance, IDD_SETFONT, NULL, ADDR DialogProc, 0
 
         .ENDIF
     .ELSE
