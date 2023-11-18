@@ -1,22 +1,9 @@
-﻿生成启动时间为 2023/11/18 22:25:40。
-     1>项目“C:\Users\MSI-NB\Desktop\白润声\作业\汇编与编译原理\textEditor\Project1\Project1.vcxproj”在节点 2 上(Build 个目标)。
-     1>_MASM:
-         Assembling code.asm...
-         cmd.exe /C "C:\Users\MSI-NB\AppData\Local\Temp\tmpa6ebef803a8e4ec987a5565cf7ff1921.cmd"
-         ml.exe /c /nologo /Zi /Fo"Debug\code.obj" /I "D:\masm32\include" /I "D:\Irvine\Irvine" /W3 /errorReport:prompt  /Tacode.asm
-     1>code.asm(79): warning A4014: instructions and initialized data not supported in BSS segments
-     1>code.asm(316): warning A6004: procedure argument or local not referenced : hPrevInst
-     1>code.asm(316): warning A6004: procedure argument or local not referenced : CmdLine
-     1>code.asm(399): warning A6004: procedure argument or local not referenced : lParam
-     1>code.asm(591): warning A6004: procedure argument or local not referenced : hdc
-     1>code.asm(591): warning A6004: procedure argument or local not referenced : ps
-     1>code.asm(591): warning A6004: procedure argument or local not referenced : rect
-       Link:
-         C:\Program Files (x86)\Microsoft Visual Studio 11.0\VC\bin\link.exe /ERRORREPORT:PROMPT /OUT:"C:\Users\MSI-NB\Desktop\白润声\作业\汇编与编译原理\textEditor\Debug\Project1.exe" /INCREMENTAL /NOLOGO /LIBPATH:D:\masm32\lib D:\Irvine\Irvine\Irvine32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:\Users\MSI-NB\Desktop\白润声\作业\汇编与编译原理\textEditor\Debug\Project1.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:\Users\MSI-NB\Desktop\白润声\作业\汇编与编译原理\textEditor\Debug\Project1.lib" /MACHINE:X86 Debug\Project1.res
-         Debug\code.obj
-         Project1.vcxproj -> C:\Users\MSI-NB\Desktop\白润声\作业\汇编与编译原理\textEditor\Debug\Project1.exe
-     1>已完成生成项目“C:\Users\MSI-NB\Desktop\白润声\作业\汇编与编译原理\textEditor\Project1\Project1.vcxproj”(Build 个目标)的操作。
-
-生成成功。
-
-已用时间 00:00:00.84
+﻿  Assembling code.asm...
+code.asm(79): warning A4014: instructions and initialized data not supported in BSS segments
+code.asm(315): warning A6004: procedure argument or local not referenced : hPrevInst
+code.asm(315): warning A6004: procedure argument or local not referenced : CmdLine
+code.asm(399): warning A6004: procedure argument or local not referenced : lParam
+code.asm(591): warning A6004: procedure argument or local not referenced : hdc
+code.asm(591): warning A6004: procedure argument or local not referenced : ps
+code.asm(591): warning A6004: procedure argument or local not referenced : rect
+  Project1.vcxproj -> C:\Users\YaoRu\Assembly-Text-Editor\Debug\Project1.exe
