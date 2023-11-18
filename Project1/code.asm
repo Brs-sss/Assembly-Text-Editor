@@ -66,6 +66,7 @@ hViewMenu HMENU ?
 hEdit HWND ?
 CommandLine LPSTR ?
 
+systemtime_buffer SYSTEMTIME <> ; 用于存储系统时间的变量
 hasSaved db, 0
 
 .const
@@ -80,7 +81,6 @@ szWarnCaption	db	'错误',0
 szCreateWarnMessage	db	'CreateFile错误',0
 szReadWarnMessage	db	'ReadFile错误',0
 
-systemtime_buffer SYSTEMTIME <> ; 用于存储系统时间的变量
 
 .code                ; Here begins our code
 start:
@@ -211,7 +211,7 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     mov hFileMenu, eax ; 文件菜单
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
-	invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveAsName
+	invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVEAS, OFFSET SaveAsName
 	invoke AppendMenu, hMenu, MF_POPUP, hFileMenu, OFFSET FileName
 
 	invoke CreatePopupMenu
@@ -401,31 +401,27 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 			.endif
 		.ELSEIF ax==IDM_SAVEAS
 			invoke	RtlZeroMemory, addr ofn, sizeof ofn
-			.if hasSaved==0
-				mov	ofn.lStructSize,sizeof ofn
-				push	hWnd
-				pop	ofn.hwndOwner
-				mov	ofn.lpstrFilter, offset szFilter
-				mov	ofn.lpstrFile, offset szFileName
-				mov ofn.lpstrDefExt, offset szDefExt
-				mov	ofn.nMaxFile, MAX_PATH
-				mov ofn.Flags, OFN_OVERWRITEPROMPT
-				invoke	GetSaveFileName, addr ofn
-				.if	eax
-					invoke CheckFileNameExtension, addr szFileName, offset szDefExt
-					mov eax, ofn.lpstrFile
-						mov esi, eax
-						xor ecx, ecx
-					.while byte ptr [esi] != 0 ;Get the name of file to be open
-						mov al, byte ptr [esi]
-						mov byte ptr [szFileName + ecx], al
-						inc esi
-						inc ecx
-					.endw
-					invoke SaveFile, addr szFileName, LENGTHOF szFileName, dwBytesWritten, hFile
-				.endif
-			.else
-				invoke SaveFile, addr pathBuffer, LENGTHOF szFileName, dwBytesWritten, hFile
+			mov	ofn.lStructSize,sizeof ofn
+			push	hWnd
+			pop	ofn.hwndOwner
+			mov	ofn.lpstrFilter, offset szFilter
+			mov	ofn.lpstrFile, offset szFileName
+			mov ofn.lpstrDefExt, offset szDefExt
+			mov	ofn.nMaxFile, MAX_PATH
+			mov ofn.Flags, OFN_OVERWRITEPROMPT
+			invoke	GetSaveFileName, addr ofn
+			.if	eax
+				invoke CheckFileNameExtension, addr szFileName, offset szDefExt
+				mov eax, ofn.lpstrFile
+					mov esi, eax
+					xor ecx, ecx
+				.while byte ptr [esi] != 0 ;Get the name of file to be open
+					mov al, byte ptr [esi]
+					mov byte ptr [szFileName + ecx], al
+					inc esi
+					inc ecx
+				.endw
+				invoke SaveFile, addr szFileName, LENGTHOF szFileName, dwBytesWritten, hFile
 			.endif
 		.ELSEIF ax==IDM_DATE
 			invoke GetLocalTime, addr systemtime_buffer
