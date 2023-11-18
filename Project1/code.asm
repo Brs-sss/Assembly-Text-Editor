@@ -61,6 +61,12 @@ dateBuffer db 64 dup(0)
 dateFormat db "%02d:%02d %04d/%02d/%02d ", 0
 pathBuffer db 256 dup(0) ; 用于记录当前文件已保存的路径
 
+ChsFont db 20 DUP(?)
+ChsStyle db 20 DUP(?)
+ChsSize db 20 DUP(?)
+
+temp DWORD 0
+
 .data?                ; 未初始化变量声明区域
 hInstance HINSTANCE ?        ; 程序的实例句柄
 hMenu HMENU ?
@@ -72,6 +78,7 @@ CommandLine LPSTR ?
 
 hasSaved db, 0
 systemtime_buffer SYSTEMTIME <> ; 用于存储系统时间的变量
+
 
 .const
 IDM_OPEN equ 1                    ; 菜单ID
@@ -93,15 +100,15 @@ szWarnCaption	db	'错误',0
 szCreateWarnMessage	db	'CreateFile错误',0
 szReadWarnMessage	db	'ReadFile错误',0
 
-OpFonts db "MS YaHei", 0          ; 可选字体、风格和粗细
+OpFonts db "Calibri", 0			  ; 可选字体、风格和粗细
+		db "Kaiti", 0			  ; 请更改支持字体、风格等，此处仅为debug示例
+		db "MS YaHei", 0          ; 更改后无需变动其他代码，ChsX..X中就会存储对应内容
 		db "Songti", 0
-		db "Kaiti", 0
-		db "Calibri", 0
 FontEnd equ $
 
-OpStyles db "light", 0
+OpStyles db "bold", 0
+		 db "light", 0
 		 db "regular", 0
-		 db "bold", 0
 StyleEnd equ $
 
 OpSizes db "100", 0
@@ -113,6 +120,10 @@ SizeEnd equ $
 infoFont db '字体', 0		  ; 提示信息
 infoStyle db '粗细', 0
 infoSize db '字号', 0
+
+debugFont db 'Enter font', 0
+debugStyle db 'Enter style', 0
+debugSize db 'Enter size', 0
 
 .code                ; Here begins our code
 start:
@@ -306,6 +317,8 @@ WinMain endp
 
 ; 对话框消息循环函数
 DialogProc PROC hWinDlg:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
+	LOCAL hList:HANDLE
+
     .IF uMsg == WM_INITDIALOG
         ; 添加List内容
 		mov esi, OFFSET OpFonts
@@ -351,14 +364,36 @@ DialogProc PROC hWinDlg:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 		mov eax, 1
     .ELSEIF uMsg == WM_COMMAND
         .IF wParam == IDOK
-            ; 处理OK按钮点击事件
+			; TODO: 更改edit控价字体
+			; 当前选定的内容已经在ChsX...X中保存，只需调用Edit的接口即可，句柄为hEdit
             invoke EndDialog, hWinDlg, 0
-		.ELSEIF wParam == IDL_FONT
+		.ELSEIF wParam == IDCANCEL
 			invoke EndDialog, hWinDlg, 0
+		.ELSE
+			mov ebx, wParam
+			mov ecx, wParam
+			shr ecx, 16 
+			.IF bx == IDL_FONT && cx == LBN_SELCHANGE
+				invoke GetDlgItem, hWinDlg, IDL_FONT				; 获取list句柄
+				mov hList, eax
+				invoke SendMessage, hList, LB_GETCURSEL, 0, 0		; 获取选中元素项数
+				invoke SendMessage, hList, LB_GETTEXT, eax, ADDR ChsFont
+			.ELSEIF bx == IDL_STYLE && cx == LBN_SELCHANGE
+				invoke GetDlgItem, hWinDlg, IDL_STYLE				
+				mov hList, eax
+				invoke SendMessage, hList, LB_GETCURSEL, 0, 0
+				invoke SendMessage, hList, LB_GETTEXT, eax, ADDR ChsStyle
+			.ELSEIF bx == IDL_SIZE && cx == LBN_SELCHANGE
+				invoke GetDlgItem, hWinDlg, IDL_SIZE				
+				mov hList, eax
+				invoke SendMessage, hList, LB_GETCURSEL, 0, 0
+				invoke SendMessage, hList, LB_GETTEXT, eax, ADDR ChsSize
+			.ENDIF
         .ENDIF
-
 	.ELSEIF uMsg == WM_CLOSE
 		invoke EndDialog, hWinDlg, 0
+
+	; TODO: 响应表单记录时间
     .ENDIF
     xor eax, eax
     ret
@@ -546,6 +581,7 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 			invoke GlobalFree, edi
 			.ELSEIF ax==IDM_FONT
 				invoke DialogBoxParam, hInstance, IDD_SETFONT, NULL, ADDR DialogProc, 0
+
         .ENDIF
     .ELSE
         invoke DefWindowProc,hWnd,uMsg,wParam,lParam
