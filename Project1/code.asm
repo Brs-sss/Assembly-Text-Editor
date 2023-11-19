@@ -64,8 +64,20 @@ pathBuffer db 256 dup(0) ; 用于记录当前文件已保存的路径
 ChsFont db 20 DUP(?)
 ChsStyle db 20 DUP(?)
 ChsSize db 20 DUP(?)
+LastFont db "SimSun", 0
+LastStyle db "regular", 0
+LastSize db "12", 0
 
 temp DWORD 0
+
+bold	db "bold", 0
+light	db "light", 0
+regular db "regular", 0
+ten     db "10", 0
+twelve     db "12", 0
+fourteen     db "14", 0
+sixteen    db "16", 0
+initFont  db "SimSun", 0
 
 .data?                ; 未初始化变量声明区域
 hInstance HINSTANCE ?        ; 程序的实例句柄
@@ -75,6 +87,9 @@ hEditMenu HMENU ?
 hViewMenu HMENU ?
 hEdit HWND ?
 CommandLine LPSTR ?
+hFont       dd ?
+hInitFont       dd ?
+nFontHeight     dd ?
 
 hasSaved db, 0
 systemtime_buffer SYSTEMTIME <> ; 用于存储系统时间的变量
@@ -100,10 +115,10 @@ szWarnCaption	db	'错误',0
 szCreateWarnMessage	db	'CreateFile错误',0
 szReadWarnMessage	db	'ReadFile错误',0
 
-OpFonts db "Calibri", 0			  ; 可选字体、风格和粗细
-		db "Kaiti", 0			  ; 请更改支持字体、风格等，此处仅为debug示例
-		db "MS YaHei", 0          ; 更改后无需变动其他代码，ChsX..X中就会存储对应内容
-		db "Songti", 0
+OpFonts db "SimSun", 0			  ; 可选字体、风格和粗细
+		db "SimHei", 0			  ; 请更改支持字体、风格等，此处仅为debug示例
+		db "KaiTi", 0          ; 更改后无需变动其他代码，ChsX..X中就会存储对应内容
+		db "LiSu", 0
 FontEnd equ $
 
 OpStyles db "bold", 0
@@ -111,15 +126,15 @@ OpStyles db "bold", 0
 		 db "regular", 0
 StyleEnd equ $
 
-OpSizes db "100", 0
-		db "200", 0
-		db "300", 0
-		db "400", 0
+OpSizes db "10", 0
+		db "12", 0
+		db "14", 0
+		db "16", 0
 SizeEnd equ $
 
-infoFont db '字体', 0		  ; 提示信息
-infoStyle db '粗细', 0
-infoSize db '字号', 0
+infoFont db "Font", 0		  ; 提示信息
+infoStyle db "Weight", 0
+infoSize db "Font Size", 0
 
 debugFont db 'Enter font', 0
 debugStyle db 'Enter style', 0
@@ -291,7 +306,7 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
     mov hFileMenu, eax ; 文件菜单
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_OPEN, OFFSET OpenName
     invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveName
-	invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVE, OFFSET SaveAsName
+	invoke AppendMenu, hFileMenu, MF_STRING, IDM_SAVEAS, OFFSET SaveAsName
 	invoke AppendMenu, hMenu, MF_POPUP, hFileMenu, OFFSET FileName
 
 	invoke CreatePopupMenu
@@ -337,6 +352,10 @@ WinMain proc hInst:HINSTANCE, hPrevInst:HINSTANCE, CmdLine:LPSTR, CmdShow:DWORD
 				hInstance, 
 				NULL
 	mov hEdit, eax
+
+	invoke CreateFont, 12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, OFFSET initFont
+	mov hInitFont, eax
+	invoke SendMessage, hEdit, WM_SETFONT, hInitFont, TRUE
 
     invoke ShowWindow, hwnd, CmdShow               ; 显示窗口
     invoke UpdateWindow, hwnd                      ; 刷新窗口
@@ -404,10 +423,307 @@ DialogProc PROC hWinDlg:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 		mov eax, 1
     .ELSEIF uMsg == WM_COMMAND
         .IF wParam == IDOK
-			; TODO: 更改edit控价字体
-			; 当前选定的内容已经在ChsX...X中保存，只需调用Edit的接口即可，句柄为hEdit
-            invoke EndDialog, hWinDlg, 0
+			; 大小
+			invoke lstrcmp, OFFSET ChsSize, OFFSET ten
+			cmp eax, 0
+			je SizesAreTen
+			invoke lstrcmp, OFFSET ChsSize, OFFSET twelve
+			cmp eax, 0
+			je SizesAreTwelve
+			invoke lstrcmp, OFFSET ChsSize, OFFSET fourteen
+			cmp eax, 0
+			je SizesAreFourteen
+			invoke lstrcmp, OFFSET ChsSize, OFFSET sixteen
+			cmp eax, 0
+			je SizesAreSixteen
+			invoke lstrcmp, OFFSET LastSize, OFFSET ten
+			cmp eax, 0
+			je SizesAreTen
+			invoke lstrcmp, OFFSET LastSize, OFFSET twelve
+			cmp eax, 0
+			je SizesAreTwelve
+			invoke lstrcmp, OFFSET LastSize, OFFSET fourteen
+			cmp eax, 0
+			je SizesAreFourteen
+			invoke lstrcmp, OFFSET LastSize, OFFSET sixteen
+			cmp eax, 0
+			je SizesAreSixteen
+SizesAreTen:
+			mov nFontHeight, 10
+			; 源字符串地址
+			mov esi, OFFSET ten
+			; 目标字符串地址
+			mov edi, OFFSET LastSize
+
+			; 复制字符串
+sizeCopyLoopTen:
+			mov al, [esi]        ; 从源字符串读取一个字节
+			mov [edi], al        ; 将字节写入目标字符串
+			inc esi              ; 源字符串指针后移
+			inc edi              ; 目标字符串指针后移
+			cmp al, 0            ; 判断是否到达字符串结尾
+			jnz sizeCopyLoopTen         ; 如果不是结尾，继续复制
+			jmp Styles
+SizesAreTwelve:
+			mov nFontHeight, 12
+			; 源字符串地址
+			mov esi, OFFSET twelve
+			; 目标字符串地址
+			mov edi, OFFSET LastSize
+
+			; 复制字符串
+sizeCopyLoopTwelve:
+			mov al, [esi]        ; 从源字符串读取一个字节
+			mov [edi], al        ; 将字节写入目标字符串
+			inc esi              ; 源字符串指针后移
+			inc edi              ; 目标字符串指针后移
+			cmp al, 0            ; 判断是否到达字符串结尾
+			jnz sizeCopyLoopTwelve         ; 如果不是结尾，继续复制
+			jmp Styles
+SizesAreFourteen:
+			mov nFontHeight, 14
+			; 源字符串地址
+			mov esi, OFFSET fourteen
+			; 目标字符串地址
+			mov edi, OFFSET LastSize
+
+			; 复制字符串
+sizeCopyLoopFourteen:
+			mov al, [esi]        ; 从源字符串读取一个字节
+			mov [edi], al        ; 将字节写入目标字符串
+			inc esi              ; 源字符串指针后移
+			inc edi              ; 目标字符串指针后移
+			cmp al, 0            ; 判断是否到达字符串结尾
+			jnz sizeCopyLoopFourteen         ; 如果不是结尾，继续复制
+			jmp Styles
+SizesAreSixteen:
+			mov nFontHeight, 16
+			; 源字符串地址
+			mov esi, OFFSET sixteen
+			; 目标字符串地址
+			mov edi, OFFSET LastSize
+
+			; 复制字符串
+sizeCopyLoopSixteen:
+			mov al, [esi]        ; 从源字符串读取一个字节
+			mov [edi], al        ; 将字节写入目标字符串
+			inc esi              ; 源字符串指针后移
+			inc edi              ; 目标字符串指针后移
+			cmp al, 0            ; 判断是否到达字符串结尾
+			jnz sizeCopyLoopSixteen         ; 如果不是结尾，继续复制
+			jmp Styles
+Styles:
+			; 粗细
+			; bold
+			invoke lstrcmp, OFFSET ChsStyle, OFFSET bold
+			cmp eax, 0
+			je StylesAreBold
+			; light
+			invoke lstrcmp, OFFSET ChsStyle, OFFSET light
+			cmp eax, 0
+			je StylesAreLight
+			; regular
+			invoke lstrcmp, OFFSET ChsStyle, OFFSET regular
+			cmp eax, 0
+			je StylesAreRegular
+			; bold
+			invoke lstrcmp, OFFSET LastStyle, OFFSET bold
+			cmp eax, 0
+			je StylesAreBold
+			; light
+			invoke lstrcmp, OFFSET LastStyle, OFFSET light
+			cmp eax, 0
+			je StylesAreLight
+			; regular
+			invoke lstrcmp, OFFSET LastStyle, OFFSET regular
+			cmp eax, 0
+			je StylesAreRegular
+StylesAreBold:
+			; 源字符串地址
+			mov esi, OFFSET bold
+			; 目标字符串地址
+			mov edi, OFFSET LastStyle
+
+			; 复制字符串
+sizeCopyLoopBold:
+			mov al, [esi]        ; 从源字符串读取一个字节
+			mov [edi], al        ; 将字节写入目标字符串
+			inc esi              ; 源字符串指针后移
+			inc edi              ; 目标字符串指针后移
+			cmp al, 0            ; 判断是否到达字符串结尾
+			jnz sizeCopyLoopBold         ; 如果不是结尾，继续复制
+
+			; 判断字符串是否为空
+			mov edi, OFFSET ChsFont ; 字符串地址
+			mov ecx, 0              ; 字符计数器清零
+			; 遍历字符串
+checkEmptyBold:
+			cmp byte ptr [edi], 0 ; 检查当前字符是否为 null（字符串结尾）
+			je  foundEmptyBold         ; 如果是，跳转到 foundEmpty
+			inc ecx               ; 字符计数器加一
+			inc edi               ; 指向下一个字符
+			jmp checkEmptyBold        ; 继续检查下一个字符
+foundEmptyBold:
+			cmp ecx, 0
+			je NoFontBold
+			; 源字符串地址
+			mov esi, OFFSET ChsFont
+			; 目标字符串地址
+			mov edi, OFFSET LastFont
+
+			; 复制字符串
+sizeCopyLoopBold1:
+			mov al, [esi]        ; 从源字符串读取一个字节
+			mov [edi], al        ; 将字节写入目标字符串
+			inc esi              ; 源字符串指针后移
+			inc edi              ; 目标字符串指针后移
+			cmp al, 0            ; 判断是否到达字符串结尾
+			jnz sizeCopyLoopBold1         ; 如果不是结尾，继续复制
+			invoke CreateFont, nFontHeight, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, OFFSET ChsFont
+			mov hFont, eax
+			invoke SendMessage, hEdit, WM_SETFONT, hFont, TRUE
+			jmp Final
+NoFontBold:
+			invoke CreateFont, nFontHeight, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, OFFSET LastFont
+			mov hFont, eax
+			invoke SendMessage, hEdit, WM_SETFONT, hFont, TRUE
+			jmp Final
+StylesAreLight:
+			; 源字符串地址
+			mov esi, OFFSET light
+			; 目标字符串地址
+			mov edi, OFFSET LastStyle
+
+			; 复制字符串
+sizeCopyLoopLight:
+			mov al, [esi]        ; 从源字符串读取一个字节
+			mov [edi], al        ; 将字节写入目标字符串
+			inc esi              ; 源字符串指针后移
+			inc edi              ; 目标字符串指针后移
+			cmp al, 0            ; 判断是否到达字符串结尾
+			jnz sizeCopyLoopLight         ; 如果不是结尾，继续复制
+
+			; 判断字符串是否为空
+			mov edi, OFFSET ChsFont ; 字符串地址
+			mov ecx, 0              ; 字符计数器清零
+			; 遍历字符串
+checkEmptyLight:
+			cmp byte ptr [edi], 0 ; 检查当前字符是否为 null（字符串结尾）
+			je  foundEmptyLight         ; 如果是，跳转到 foundEmpty
+			inc ecx               ; 字符计数器加一
+			inc edi               ; 指向下一个字符
+			jmp checkEmptyLight        ; 继续检查下一个字符
+foundEmptyLight:
+			cmp ecx, 0
+			je NoFontLight
+			; 源字符串地址
+			mov esi, OFFSET ChsFont
+			; 目标字符串地址
+			mov edi, OFFSET LastFont
+
+			; 复制字符串
+sizeCopyLoopLight1:
+			mov al, [esi]        ; 从源字符串读取一个字节
+			mov [edi], al        ; 将字节写入目标字符串
+			inc esi              ; 源字符串指针后移
+			inc edi              ; 目标字符串指针后移
+			cmp al, 0            ; 判断是否到达字符串结尾
+			jnz sizeCopyLoopLight1         ; 如果不是结尾，继续复制
+			invoke CreateFont, nFontHeight, 0, 0, 0, FW_LIGHT, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, OFFSET ChsFont
+			mov hFont, eax
+			invoke SendMessage, hEdit, WM_SETFONT, hFont, TRUE
+			jmp Final
+NoFontLight:
+			invoke CreateFont, nFontHeight, 0, 0, 0, FW_LIGHT, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, OFFSET LastFont
+			mov hFont, eax
+			invoke SendMessage, hEdit, WM_SETFONT, hFont, TRUE
+			jmp Final
+StylesAreRegular:
+			; 源字符串地址
+			mov esi, OFFSET regular
+			; 目标字符串地址
+			mov edi, OFFSET LastStyle
+
+			; 复制字符串
+sizeCopyLoopRegular:
+			mov al, [esi]        ; 从源字符串读取一个字节
+			mov [edi], al        ; 将字节写入目标字符串
+			inc esi              ; 源字符串指针后移
+			inc edi              ; 目标字符串指针后移
+			cmp al, 0            ; 判断是否到达字符串结尾
+			jnz sizeCopyLoopRegular         ; 如果不是结尾，继续复制
+
+			; 判断字符串是否为空
+			mov edi, OFFSET ChsFont ; 字符串地址
+			mov ecx, 0              ; 字符计数器清零
+			; 遍历字符串
+checkEmpty:
+			cmp byte ptr [edi], 0 ; 检查当前字符是否为 null（字符串结尾）
+			je  foundEmpty         ; 如果是，跳转到 foundEmpty
+			inc ecx               ; 字符计数器加一
+			inc edi               ; 指向下一个字符
+			jmp checkEmpty        ; 继续检查下一个字符
+foundEmpty:
+			cmp ecx, 0
+			je NoFont
+			; 源字符串地址
+			mov esi, OFFSET ChsFont
+			; 目标字符串地址
+			mov edi, OFFSET LastFont
+
+			; 复制字符串
+sizeCopyLoopRegular1:
+			mov al, [esi]        ; 从源字符串读取一个字节
+			mov [edi], al        ; 将字节写入目标字符串
+			inc esi              ; 源字符串指针后移
+			inc edi              ; 目标字符串指针后移
+			cmp al, 0            ; 判断是否到达字符串结尾
+			jnz sizeCopyLoopRegular1         ; 如果不是结尾，继续复制
+			invoke CreateFont, nFontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, OFFSET ChsFont
+			mov hFont, eax
+			invoke SendMessage, hEdit, WM_SETFONT, hFont, TRUE
+			jmp Final
+NoFont:
+			invoke CreateFont, nFontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH, OFFSET LastFont
+			mov hFont, eax
+			invoke SendMessage, hEdit, WM_SETFONT, hFont, TRUE
+			jmp Final
+Final:
+			; 清空字符串变量
+			mov ecx, LENGTHOF ChsFont
+			lea edi, ChsFont
+			xor eax, eax
+			rep stosb
+
+			mov ecx, LENGTHOF ChsStyle
+			lea edi, ChsStyle
+			xor eax, eax
+			rep stosb
+
+			mov ecx, LENGTHOF ChsSize
+			lea edi, ChsSize
+			xor eax, eax
+			rep stosb
+
+			invoke EndDialog, hWinDlg, 0
+
 		.ELSEIF wParam == IDCANCEL
+			; 清空字符串变量
+			mov ecx, LENGTHOF ChsFont
+			lea edi, ChsFont
+			xor eax, eax
+			rep stosb
+
+			mov ecx, LENGTHOF ChsStyle
+			lea edi, ChsStyle
+			xor eax, eax
+			rep stosb
+
+			mov ecx, LENGTHOF ChsSize
+			lea edi, ChsSize
+			xor eax, eax
+			rep stosb
+
 			invoke EndDialog, hWinDlg, 0
 		.ELSE
 			mov ebx, wParam
@@ -431,8 +747,22 @@ DialogProc PROC hWinDlg:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 			.ENDIF
         .ENDIF
 	.ELSEIF uMsg == WM_CLOSE
+			; 清空字符串变量
+			mov ecx, LENGTHOF ChsFont
+			lea edi, ChsFont
+			xor eax, eax
+			rep stosb
+
+			mov ecx, LENGTHOF ChsStyle
+			lea edi, ChsStyle
+			xor eax, eax
+			rep stosb
+
+			mov ecx, LENGTHOF ChsSize
+			lea edi, ChsSize
+			xor eax, eax
+			rep stosb
 		invoke EndDialog, hWinDlg, 0
-	; TODO: 响应表单记录时间
     .ENDIF
     xor eax, eax
     ret
@@ -560,7 +890,6 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 			invoke HandleUnsaved, hWnd, bytesRead, hFile, dwBytesWritten, ofn
 		.ELSEIF ax==IDM_SAVEAS
 			invoke	RtlZeroMemory, addr ofn, sizeof ofn
-			.if hasSaved==0
 				mov	ofn.lStructSize,sizeof ofn
 				push	hWnd
 				pop	ofn.hwndOwner
@@ -583,9 +912,6 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 					.endw
 					invoke SaveFile, addr szFileName, LENGTHOF szFileName, dwBytesWritten, hFile
 				.endif
-			.else
-				invoke SaveFile, addr pathBuffer, LENGTHOF szFileName, dwBytesWritten, hFile
-			.endif
 			mov hasChanged, 0
 		.ELSEIF ax==IDM_DATE
 			invoke GetLocalTime, addr systemtime_buffer

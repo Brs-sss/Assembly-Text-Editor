@@ -1,9 +1,15 @@
 ﻿  Assembling code.asm...
-code.asm(79): warning A4014: instructions and initialized data not supported in BSS segments
-code.asm(315): warning A6004: procedure argument or local not referenced : hPrevInst
-code.asm(315): warning A6004: procedure argument or local not referenced : CmdLine
-code.asm(399): warning A6004: procedure argument or local not referenced : lParam
-code.asm(591): warning A6004: procedure argument or local not referenced : hdc
-code.asm(591): warning A6004: procedure argument or local not referenced : ps
-code.asm(591): warning A6004: procedure argument or local not referenced : rect
+code.asm(94): warning A4014: instructions and initialized data not supported in BSS segments
+code.asm(96): warning A4014: instructions and initialized data not supported in BSS segments
+code.asm(277): warning A6004: procedure argument or local not referenced : bytesRead
+code.asm(371): warning A6004: procedure argument or local not referenced : hPrevInst
+code.asm(371): warning A6004: procedure argument or local not referenced : CmdLine
+code.asm(769): warning A6004: procedure argument or local not referenced : lParam
+code.asm(769): warning A6004: procedure argument or local not referenced : bytesRead
+code.asm(769): warning A6004: procedure argument or local not referenced : hFile
+code.asm(769): warning A6004: procedure argument or local not referenced : dwBytesWritten
+code.asm(769): warning A6004: procedure argument or local not referenced : ofn
+code.asm(955): warning A6004: procedure argument or local not referenced : hdc
+code.asm(955): warning A6004: procedure argument or local not referenced : ps
+code.asm(955): warning A6004: procedure argument or local not referenced : rect
   Project1.vcxproj -> C:\Users\YaoRu\Assembly-Text-Editor\Debug\Project1.exe
